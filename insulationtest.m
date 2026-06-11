@@ -1,3 +1,25 @@
+%% insulationtest.m - Insulation Test Thermistor Data Logger
+% This MATLAB script reads thermistor data from the Arduino insulationread.ino sketch
+% and displays real-time temperature monitoring for system insulation validation.
+%
+% THERMISTOR CALIBRATION:
+% The Arduino sketch uses centralized calibration from config/config.h:
+%   - System Monitoring Sensors (Pins A2, A3): Beta coefficient = 3950K, 10K nominal
+%   - Steinhart-Hart formula implementation: libraries/thermistor_sensor.h
+%   - ADC Resolution: 12-bit (4095 levels, Unified across all sketches)
+%   - Series Resistance: 10K ohms (configured in config.h)
+%   - Purpose: Validate insulation performance during heat chamber operation
+%
+% OUTPUT:
+% CSV files with timestamp (Time_s, Temp1_C, Temp2_C)
+% Saved every 30 seconds during data collection
+%
+% CONNECTION:
+% Ensure Arduino COM port matches your system (currently set to /dev/cu.usbmodem2101)
+% Baud rate: 9600
+%
+% See Also: heatchamber.m, config/config.h, libraries/thermistor_sensor.h
+
 port = "/dev/cu.usbmodem2101";  % Arduino port name
 baud = 9600;
 s = serialport(port, baud);

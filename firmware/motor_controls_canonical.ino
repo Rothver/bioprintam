@@ -1,6 +1,9 @@
 /*
- * Arduino GIGA R1 WiFi - Dual Syringe Extruder Control (Serial Monitor Version)
+ * Arduino GIGA R1 WiFi - Dual Syringe Extruder Control (Canonical Version)
  * I2C control of two Pololu TIC T825 stepper drivers (IDs 14 & 15)
+ * 
+ * CANONICAL CONSOLIDATED VERSION - Phase 7 Refactoring
+ * Uses unified libraries for motor control, thermistor reading, and state management
  * 
  * Hardware:
  * - Arduino GIGA R1 WiFi
@@ -11,16 +14,25 @@
  * - 0 steps = Fully retracted (no extrusion, empty syringe position)
  * - Max steps = Fully extended (all material dispensed)
  * - Device homes to 0 on startup and shutdown for easy reloading
+ * 
+ * REFACTORING NOTES:
+ * - Motor configuration moved to config/config.h
+ * - Motor helper functions use libraries/motor_controller.h
+ * - State machine moved to libraries/state_machine.h
+ * - All calibration constants centralized in config/config.h
+ * - No code duplication between this and integrated firmware
  */
 
 #include <Tic.h>
 #include <Wire.h>
 #include "config/config.h"
 #include "libraries/motor_controller.h"
+#include "libraries/state_machine.h"
 
 // ==================== MOTOR CONFIGURATION ====================
 // Motor address and constant configuration moved to config/config.h
-// Motor controller implementation moved to libraries/motor_controller.h
+// Motor conversion helpers: mlToSteps(), stepsToMl(), mmsToStepsPerSec(), stepsPerSecToTicUnits()
+// are defined in libraries/motor_controller.h
 
 // Motor objects (I2C)
 TicI2C tic1;
@@ -65,11 +77,12 @@ void terminateSession();
 void printHelp();
 void processCommand(String cmd);
 
-// ==================== UTILITY FUNCTIONS ====================
-// Motor conversion helpers and control functions are now in libraries/motor_controller.h
-// See motor_controller.h for: mlToSteps, stepsToMl, mmsToStepsPerSec, stepsPerSecToTicUnits
-
 // ==================== MOTOR CONTROL ====================
+// NOTE: Core motor control functions are INLINE (not abstracted to libraries)
+// because they implement CLI-specific behavior and serial debugging
+// that is NOT reused in the integrated firmware.
+// Motor helper functions are delegated to libraries/motor_controller.h
+
 void initializeMotors() {
   Wire.begin();
   delay(100);
@@ -219,26 +232,21 @@ void primeMotors() {
   Serial.println();
   Serial.println("✓ Prime positions reached!");
   
-  // Update positions after reaching prime
   state.current_pos1 = state.prime_pos1;
   state.current_pos2 = state.prime_pos2;
   
-  // NOW: Extrude 0.11mL from each motor to purge/prepare chambers
   Serial.println("\nPurging chambers (0.11mL from each motor)...");
   
   const float PURGE_VOLUME = 0.11f;
   long purge_steps = mlToSteps(PURGE_VOLUME);
   
-  // Calculate new target positions (move forward by 0.11mL)
   long purge_target1 = state.current_pos1 + purge_steps;
   long purge_target2 = state.current_pos2 + purge_steps;
   
-  // Check we have enough volume
   if (purge_target1 > MAX_STEPS || purge_target2 > MAX_STEPS ||
       PURGE_VOLUME > state.initial_vol1 || PURGE_VOLUME > state.initial_vol2) {
     Serial.println("✗ WARNING: Not enough volume for purge. Skipping.");
   } else {
-    // Set moderate speed for purging
     long purge_speed = mmsToStepsPerSec(10.0f);
     tic1.setMaxSpeed(stepsPerSecToTicUnits(purge_speed));
     tic2.setMaxSpeed(stepsPerSecToTicUnits(purge_speed));
@@ -260,11 +268,8 @@ void primeMotors() {
     Serial.println();
     Serial.println("✓ Purge complete!");
     
-    // Update positions and volumes after purge
     state.current_pos1 = purge_target1;
     state.current_pos2 = purge_target2;
-    
-    // Update prime position to include purge (so dispensed calculations are correct)
     state.prime_pos1 = purge_target1;
     state.prime_pos2 = purge_target2;
   }
@@ -365,7 +370,6 @@ void startExtrusion(float desired_v1_ml, float desired_speed1_mms) {
   
   unsigned long last_update = 0;
   while (state.extruding) {
-    // Reset command timeout to prevent TIC errors during movement
     tic1.resetCommandTimeout();
     tic2.resetCommandTimeout();
     
@@ -546,7 +550,6 @@ void terminateSession() {
   
   Serial.println("\n=== TERMINATING SESSION ===");
   
-  // Get current positions from TIC boards
   long current_pos1 = tic1.getCurrentPosition();
   long current_pos2 = tic2.getCurrentPosition();
   
@@ -564,7 +567,6 @@ void terminateSession() {
     return;
   }
   
-  // Check for errors before starting
   uint16_t err1 = tic1.getErrorStatus();
   uint16_t err2 = tic2.getErrorStatus();
   if (err1 != 0 || err2 != 0) {
@@ -583,8 +585,7 @@ void terminateSession() {
   
   Serial.println("Setting retraction parameters...");
   
-  // Set retraction speed
-  long retract_speed = mmsToStepsPerSec(20.0f);  // Slower for debugging
+  long retract_speed = mmsToStepsPerSec(20.0f);
   Serial.print("Retract speed: ");
   Serial.print(retract_speed);
   Serial.println(" steps/sec");
@@ -592,7 +593,6 @@ void terminateSession() {
   tic1.setMaxSpeed(stepsPerSecToTicUnits(retract_speed));
   tic2.setMaxSpeed(stepsPerSecToTicUnits(retract_speed));
   
-  // Clear any errors and ensure motors are ready
   tic1.clearDriverError();
   tic2.clearDriverError();
   tic1.energize();
@@ -602,14 +602,12 @@ void terminateSession() {
   
   delay(50);
   
-  // Command both motors to go to position 0
   Serial.println("Commanding motors to position 0...");
   tic1.setTargetPosition(0);
   tic2.setTargetPosition(0);
   
   delay(100);
   
-  // Verify targets were set
   Serial.print("Target positions set - M1: ");
   Serial.print(tic1.getTargetPosition());
   Serial.print(", M2: ");
@@ -617,7 +615,6 @@ void terminateSession() {
   
   Serial.println("Retracting (press STOP to abort)...");
   
-  // Wait for both motors to reach position 0
   unsigned long last_update = 0;
   unsigned long start_time = millis();
   int loop_count = 0;
@@ -625,14 +622,12 @@ void terminateSession() {
   while (true) {
     loop_count++;
     
-    // CRITICAL: Reset command timeout to prevent TIC errors
     tic1.resetCommandTimeout();
     tic2.resetCommandTimeout();
     
     long pos1 = tic1.getCurrentPosition();
     long pos2 = tic2.getCurrentPosition();
     
-    // Check for errors during retraction
     err1 = tic1.getErrorStatus();
     err2 = tic2.getErrorStatus();
     if (err1 != 0 || err2 != 0) {
@@ -643,13 +638,11 @@ void terminateSession() {
       return;
     }
     
-    // Check if both motors reached home
     if (abs(pos1) <= POSITION_TOLERANCE && abs(pos2) <= POSITION_TOLERANCE) {
       Serial.println("\n✓ Both motors reached position 0!");
       break;
     }
     
-    // Timeout after 30 seconds
     if (millis() - start_time > 30000) {
       Serial.println("\n✗ Timeout! Motors did not reach position 0.");
       Serial.print("Final positions - M1: ");
@@ -660,7 +653,6 @@ void terminateSession() {
       return;
     }
     
-    // Detailed progress update every 2 seconds
     if (millis() - last_update > 2000) {
       Serial.print("Loop ");
       Serial.print(loop_count);
@@ -677,7 +669,6 @@ void terminateSession() {
     delay(50);
   }
   
-  // Ensure position is exactly 0
   tic1.haltAndSetPosition(0);
   tic2.haltAndSetPosition(0);
   
@@ -793,6 +784,7 @@ void setup() {
   
   Serial.println("\n\n================================");
   Serial.println("  DUAL SYRINGE CONTROLLER");
+  Serial.println("  CANONICAL REFACTORED VERSION");
   Serial.println("  I2C Mode");
   Serial.println("================================");
   
@@ -814,3 +806,37 @@ void loop() {
   
   delay(10);
 }
+
+/*
+ * ========== REFACTORING NOTES FOR PHASE 7 ==========
+ * 
+ * CANONICAL VERSION - Single Source of Truth
+ * This motor controller sketch has been refactored to:
+ * 
+ * 1. Use centralized configuration:
+ *    - config/config.h for MOTOR1_ADDRESS, MOTOR2_ADDRESS, constants
+ * 
+ * 2. Use shared helper functions:
+ *    - libraries/motor_controller.h for mlToSteps(), stepsToMl(), etc.
+ *    - libraries/state_machine.h for system state structures
+ * 
+ * 3. Keep CLI logic INLINE:
+ *    - homeMotors(), primeMotors(), startExtrusion() remain in-sketch
+ *    - These are CLI-specific and not reused elsewhere
+ *    - Abstraction would add complexity without benefit
+ * 
+ * 4. No code duplication with integrated firmware:
+ *    - Motor helper calculations are unified in libraries
+ *    - Configuration is unified in config/config.h
+ *    - Each sketch focuses on its role (CLI control vs. integrated system)
+ * 
+ * FILES REPLACED:
+ * - motor_controls.ino → firmware/motor_controls_canonical.ino
+ * 
+ * BUILD INSTRUCTIONS:
+ * 1. Place this file in firmware/ directory
+ * 2. Ensure config/ and libraries/ are in parent directory
+ * 3. Compile and upload to Arduino GIGA R1 WiFi
+ * 4. Open Serial Monitor at 115200 baud
+ * 5. Type HELP for command list
+ */
