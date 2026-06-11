@@ -1,39 +1,19 @@
-#include <math.h> 
-
-const int numThermistors = 2;
-const int thermistorPins[numThermistors] = {A0, A1};
-
-// Constants for all thermistors
-const float seriesResistor = 10000.0;
-const float thermistorNominal = 10000.0;
-const float temperatureNominal = 25.0;
-const float betaCoefficient = 3950.0;
+#include <math.h>
+#include "config/config.h"
+#include "libraries/thermistor_sensor.h"
 
 void setup() {
   Serial.begin(9600);
+  analogReadResolution(12);  // Unified to 12-bit per config.h
 }
 
 void loop() {
-  float temps[numThermistors];
+  float temps[2];
 
-  for (int i = 0; i < numThermistors; i++) {
-    int adcValue = analogRead(thermistorPins[i]);
-
-    // convert ADC to resistance
-    float voltageRatio = (1023.0 / adcValue) - 1.0;
-    float resistance = seriesResistor / voltageRatio;
-
-    // Steinhart-Hart equation
-    float steinhart;
-    steinhart = resistance / thermistorNominal;      
-    steinhart = log(steinhart);                      
-    steinhart /= betaCoefficient;                    
-    steinhart += 1.0 / (temperatureNominal + 273.15); 
-    steinhart = 1.0 / steinhart;                     
-    steinhart -= 273.15;                             
-
-    temps[i] = steinhart;
-  }
+  // Read 2 system thermistors (A0, A1) using unified library function
+  // Note: Using SYSTEM_SENSOR type with 3950K beta coefficient
+  temps[0] = readThermistor(THERMISTOR_PIN_A0, SYSTEM_SENSOR);
+  temps[1] = readThermistor(THERMISTOR_PIN_A1, SYSTEM_SENSOR);
 
   // *** Print just CSV ***
   Serial.print(temps[0], 2);

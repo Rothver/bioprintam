@@ -1,13 +1,6 @@
 #include <math.h>
-
-const int numThermistors = 4;
-const int thermistorPins[numThermistors] = {A0, A1, A2, A3};
-
-// Constants for all thermistors
-const float seriesResistor = 10000.0;
-const float thermistorNominal = 10000.0;
-const float temperatureNominal = 25.0;
-const float betaCoefficient = 3435.0;
+#include "config/config.h"
+#include "libraries/thermistor_sensor.h"
 
 void setup() {
   Serial.begin(9600);
@@ -15,26 +8,10 @@ void setup() {
 }
 
 void loop() {
-  float temps[numThermistors];
+  float temps[4];
 
-  for (int i = 0; i < numThermistors; i++) {
-    int adcValue = analogRead(thermistorPins[i]);
-
-    // convert ADC to resistance
-    float voltageRatio = (4095.0 / adcValue) - 1.0;
-    float resistance = seriesResistor / voltageRatio;
-
-    // Steinhart-Hart equation
-    float steinhart;
-    steinhart = resistance / thermistorNominal;      
-    steinhart = log(steinhart);                      
-    steinhart /= betaCoefficient;                    
-    steinhart += 1.0 / (temperatureNominal + 273.15); 
-    steinhart = 1.0 / steinhart;                     
-    steinhart -= 273.15;                             
-
-    temps[i] = steinhart;
-  }
+  // Read all 4 thermistors using unified library function
+  readAllThermistors(temps);
 
   // *** Print just CSV ***
   Serial.print(temps[0], 1);

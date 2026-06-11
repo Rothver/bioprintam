@@ -34,6 +34,12 @@
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
+#include "config/config.h"
+#include "libraries/thermistor_sensor.h"
+#include "libraries/motor_controller.h"
+#include "libraries/pid_controller.h"
+#include "libraries/state_machine.h"
+#include "libraries/extrusion_helpers.h"
 
 // ==================== DISPLAY & TOUCH ====================
 GigaDisplay_GFX display;
@@ -71,90 +77,18 @@ TicI2C tic2;
 const int MOSFET_PIN = 9;
 
 // ==================== THERMISTOR CONFIGURATION ====================
-const int numThermistors = 4;
-const int thermistorPins[numThermistors] = {A0, A1, A2, A3};
-
-// Thermistor constants for A0, A1 (heat mats)
-const float seriesResistor_heat = 10000.0;
-const float thermistorNominal_heat = 10000.0;
-const float temperatureNominal_heat = 25.0;
-const float betaCoefficient_heat = 3435.0;
-
-// Thermistor constants for A2, A3 (system)
-const float seriesResistor_sys = 10000.0;
-const float thermistorNominal_sys = 10000.0;
-const float temperatureNominal_sys = 25.0;
-const float betaCoefficient_sys = 3950.0;
-
-float currentTemperatures[numThermistors] = {-999, -999, -999, -999};
-unsigned long lastTempUpdate = 0;
-const unsigned long TEMP_UPDATE_INTERVAL = 1000;
-
-// ==================== PID CONTROL PARAMETERS ====================
-float Setpoint_HeatMat = 80.0;
-float Kp_HeatMat = 150.0;
-float Input_HeatMat = 25.0;
-float Output_HeatMat = 0.0;
-
-float Setpoint_Syringe = 35.0;
-float Kp_Syringe = 150.0;
-float Input_Syringe = 25.0;
-float Output_Syringe = 0.0;
-
-bool heatControlEnabled = false;
-bool syringesTempReached = false;
+// All thermistor calibration moved to config/config.h
+// Sensor types defined in libraries/thermistor_sensor.h
+// Temperature control state moved to libraries/pid_controller.h
 
 // ==================== STATE MACHINE ====================
-enum SystemState {
-  UNINITIALIZED,
-  LOAD,
-  SETUP,
-  PRIMED,
-  READY,
-  EXTRUDING,
-  COMPLETE,
-  SAFE_MODE
-};
-
+// All state and page enums moved to libraries/state_machine.h
 SystemState current_state = UNINITIALIZED;
-
-// ==================== UI PAGE DEFINITIONS ====================
-enum Page {
-  MOTOR_ZERO_CHECK,
-  RETRACTING_TO_ZERO,
-  CALIBRATION_IN_PROGRESS,
-  WELCOME,
-  HOME,
-  TEMPERATURE_PAGE,
-  VOLUME1,
-  VOLUME2,
-  CONCENTRATION,
-  SPEED,
-  PRINT_CONFIRM,
-  LOADING_PAGE,
-  HOMING_PAGE,
-  LOADING_SYRINGES,
-  WAITING_FOR_SYRINGES,
-  TEMP_READY,
-  EXTRUSION_SETUP,
-  READY_TO_PRINT,
-  PRINTING_PAGE,
-  POST_EXTRUSION_OPTIONS,
-  PRINT_DONE,
-  SHUTDOWN_CONFIRM,
-  SHUTTING_DOWN,
-  SHUTDOWN_COMPLETE,
-  ERROR_PAGE
-};
-
 Page currentPage = WELCOME;
 
-// Temperature stabilization tracking
-float currentDisplayTemp = 25.0;
+// System state tracking (temperature stabilization is now in pid_controller.h)
 bool systemReady = false;
 unsigned long tempStableTime = 0;
-const unsigned long TEMP_STABLE_DURATION = 3000;
-const float TEMP_TOLERANCE = 2.0;
 
 // ==================== POSITION TRACKING ====================
 long arduino_pos1 = 0;
@@ -188,38 +122,15 @@ bool calibrationComplete = false;
 unsigned long shutdownStartTime = 0;
 bool shutdownInProgress = false;
 
+
 // ==================== SYSTEM CONFIGURATION ====================
-struct SystemConfig {
-  float ratio1 = 1.0f;
-  float ratio2 = 1.0f;
-  float syringe_vol1 = 10.0f;
-  float syringe_vol2 = 10.0f;
-  float extrude_vol1 = 1.0f;
-  float extrude_speed = 2.0f;
-  float dispensed1 = 0.0f;
-  float dispensed2 = 0.0f;
-  float remaining1 = 10.0f;
-  float remaining2 = 10.0f;
-  long prime_pos1 = LOAD_POSITION;
-  long prime_pos2 = LOAD_POSITION;
-} config;
+// SystemConfig struct moved to libraries/state_machine.h
+SystemConfig config;
 
-// Extrusion validation structure
-struct ExtrusionValidation {
-  bool is_valid;
-  String error_message;
-  String suggestion;
-};
+// ExtrusionValidation struct moved to libraries/state_machine.h
 
-// UI options
-int tempOptions[] = {30, 32, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80};
-int numTempOptions = 12;
-int concOptions[] = {0, 25, 50, 75, 100};
-int numConcOptions = 5;
-int volOptions[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-int numVolOptions = 10;
-int speedOptions[] = {1, 2, 3, 4, 5};
-int numSpeedOptions = 5;
+// UI options moved to libraries/state_machine.h
+// Access via: TEMP_OPTIONS[], NUM_TEMP_OPTIONS, etc.
 
 bool lastTouchState = false;
 bool isPrinting = false;
@@ -243,103 +154,11 @@ inline long stepsPerSecToTicUnits(long steps_per_sec) {
 }
 
 // ==================== THERMISTOR FUNCTIONS ====================
-float readThermistor(int pin, bool isHeatMat) {
-  int adcValue = analogRead(pin);
-  
-  if (adcValue <= 10 || adcValue >= 4095) {
-    return -999.0;
-  }
-  
-  float seriesR = isHeatMat ? seriesResistor_heat : seriesResistor_sys;
-  float nominalR = isHeatMat ? thermistorNominal_heat : thermistorNominal_sys;
-  float nominalT = isHeatMat ? temperatureNominal_heat : temperatureNominal_sys;
-  float beta = isHeatMat ? betaCoefficient_heat : betaCoefficient_sys;
-  
-  float voltageRatio = (4095.0 / adcValue) - 1.0;
-  float resistance = seriesR / voltageRatio;
-  
-  float steinhart = resistance / nominalR;
-  steinhart = log(steinhart);
-  steinhart /= beta;
-  steinhart += 1.0 / (nominalT + 273.15);
-  steinhart = 1.0 / steinhart;
-  steinhart -= 273.15;
-  
-  return steinhart;
-}
+// Thermistor reading delegated to thermistor_sensor.h library
 
-void updateTemperatures() {
-  currentTemperatures[0] = readThermistor(thermistorPins[0], true);
-  currentTemperatures[1] = readThermistor(thermistorPins[1], true);
-  currentTemperatures[2] = readThermistor(thermistorPins[2], false);
-  currentTemperatures[3] = readThermistor(thermistorPins[3], false);
-  
-  if (currentTemperatures[0] > -999.0 && currentTemperatures[1] > -999.0) {
-    Input_HeatMat = (currentTemperatures[0] + currentTemperatures[1]) / 2.0;
-  } else if (currentTemperatures[0] > -999.0) {
-    Input_HeatMat = currentTemperatures[0];
-  } else if (currentTemperatures[1] > -999.0) {
-    Input_HeatMat = currentTemperatures[1];
-  } else {
-    Input_HeatMat = -999.0;
-  }
-  
-  if (currentTemperatures[2] > -999.0 && currentTemperatures[3] > -999.0) {
-    Input_Syringe = (currentTemperatures[2] + currentTemperatures[3]) / 2.0;
-    currentDisplayTemp = Input_Syringe;
-  } else if (currentTemperatures[2] > -999.0) {
-    Input_Syringe = currentTemperatures[2];
-    currentDisplayTemp = currentTemperatures[2];
-  } else if (currentTemperatures[3] > -999.0) {
-    Input_Syringe = currentTemperatures[3];
-    currentDisplayTemp = currentTemperatures[3];
-  } else {
-    Input_Syringe = -999.0;
-    currentDisplayTemp = -999.0;
-  }
-  
-  if (Input_Syringe > -999.0 && abs(Input_Syringe - Setpoint_Syringe) <= TEMP_TOLERANCE) {
-    syringesTempReached = true;
-  } else {
-    syringesTempReached = false;
-  }
-}
-
-// ==================== DUAL PID CONTROL ====================
-void computeDualPID() {
-  if (!heatControlEnabled || Input_HeatMat < 0 || Input_Syringe < 0) {
-    Output_HeatMat = 0;
-    Output_Syringe = 0;
-    return;
-  }
-  
-  float error_HeatMat = Setpoint_HeatMat - Input_HeatMat;
-  Output_HeatMat = Kp_HeatMat * error_HeatMat;
-  Output_HeatMat = constrain(Output_HeatMat, 0, 255);
-  
-  float error_Syringe = Setpoint_Syringe - Input_Syringe;
-  Output_Syringe = Kp_Syringe * error_Syringe;
-  Output_Syringe = constrain(Output_Syringe, 0, 255);
-}
-
-void applyHeatControl() {
-  computeDualPID();
-  
-  if (!heatControlEnabled) {
-    analogWrite(MOSFET_PIN, 0);
-    return;
-  }
-  
-  int finalPWM = 0;
-  
-  if (!syringesTempReached) {
-    finalPWM = (int)Output_HeatMat;
-  } else {
-    finalPWM = min((int)Output_HeatMat, (int)Output_Syringe);
-  }
-  
-  analogWrite(MOSFET_PIN, finalPWM);
-}
+// ==================== TEMPERATURE CONTROL FUNCTIONS (from pid_controller.h) ====================
+// updateTemperatures(), computeDualPID(), applyHeatControl() are now defined in libraries/pid_controller.h
+// These are called from the main loop and UI handlers without modification
 
 // ==================== POSITION SYNCHRONIZATION ====================
 bool syncPositionToTIC() {

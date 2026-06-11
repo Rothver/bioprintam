@@ -1,3 +1,25 @@
+%% heatchamber.m - Heat Chamber Thermistor Data Logger
+% This MATLAB script reads thermistor data from the Arduino heatchamber.ino sketch
+% and displays real-time temperature monitoring across 4 NTC thermistors.
+%
+% THERMISTOR CALIBRATION:
+% The Arduino sketch uses centralized calibration from config/config.h:
+%   - Heat Mat Sensors (Pins A0, A1): Beta coefficient = 3435K, 10K nominal
+%   - System Monitoring Sensors (Pins A2, A3): Beta coefficient = 3950K, 10K nominal
+%   - Steinhart-Hart formula implementation: libraries/thermistor_sensor.h
+%   - ADC Resolution: 12-bit (4095 levels, Unified across all sketches)
+%   - Series Resistance: 10K ohms (configured in config.h)
+%
+% OUTPUT:
+% CSV files with timestamp (Time_s, Temp1_C, Temp2_C, Temp3_C, Temp4_C)
+% Saved every 30 seconds during data collection
+%
+% CONNECTION:
+% Ensure Arduino COM port matches your system (currently set to /dev/cu.usbmodem1101)
+% Baud rate: 9600
+%
+% See Also: insulationtest.m, config/config.h, libraries/thermistor_sensor.h
+
 port = "/dev/cu.usbmodem1101";  % your Arduino port
 baud = 9600;
 s = serialport(port, baud);
