@@ -25,12 +25,7 @@ extern long arduino_pos1;
 extern long arduino_pos2;
 extern SystemState current_state;
 
-// Motor constants - pulled from config.h in actual use
-// These are referenced here for documentation; actual use pulls from config.h
-#define MM_PER_ML       6.05f
-#define MM_PER_STEP     0.00605f
-#define STEPS_PER_ML    1000.0f
-#define LOAD_POSITION   15000L
+// Motor constants (MM_PER_ML, MM_PER_STEP, STEPS_PER_ML, LOAD_POSITION) come from config.h
 
 // ==================== CONFIGURATION HELPERS ====================
 
