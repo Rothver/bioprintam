@@ -3,7 +3,6 @@
 
 // ==================== DISPLAY & TOUCH INCLUDES ====================
 #include <Arduino_GigaDisplay_GFX.h>
-#include <GigaDisplay_GFX.h>
 #include <Arduino_GigaDisplayTouch.h>
 
 // External display object (declared in main .ino)
@@ -45,6 +44,12 @@ extern SystemState current_state;
 extern const GFXfont FreeSansBold18pt7b;
 extern const GFXfont FreeSansBold12pt7b;
 extern const GFXfont FreeSans9pt7b;
+
+// Functions declared in main file
+extern void calibrateMotorsOnStartup();
+extern bool homeMotors();
+extern bool moveMotorsTo();
+
 
 // ==================== PAGE DRAWING FUNCTIONS ====================
 // Forward declarations for helpers called before their definitions in this file

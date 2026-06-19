@@ -56,10 +56,8 @@
 // ==================== COMPILE-TIME CONFIGURATION ====================
 #ifdef SKIP_TEMP_VALIDATION
   #define TEMP_VALIDATION_REQUIRED false
-  #pragma message "BUILDING: NO_TEMP_REQ variant - temperature validation SKIPPED"
 #else
   #define TEMP_VALIDATION_REQUIRED true
-  #pragma message "BUILDING: STANDARD variant - temperature validation REQUIRED"
 #endif
 
 // ==================== DISPLAY & TOUCH ====================
@@ -110,7 +108,6 @@ float cycleTargetVol2 = 0.0;
 
 // Zero retraction tracking
 unsigned long retractionStartTime = 0;
-const unsigned long RETRACTION_DURATION = 15000;  // 15 seconds in milliseconds
 bool calibrationComplete = false;
 
 // Shutdown tracking
@@ -328,7 +325,7 @@ void loop() {
   // ---- 4. Touch input dispatch ----
   uint8_t contacts;
   GDTpoint_t points[5];
-  contacts = touchDetector.getPoints(points, 5);
+  contacts = touchDetector.getTouchPoints(points);
 
   if (contacts > 0) {
     int touchX = points[0].x;
