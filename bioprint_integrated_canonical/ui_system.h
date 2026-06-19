@@ -10,18 +10,10 @@
 extern GigaDisplay_GFX display;
 extern Arduino_GigaDisplayTouch touchDetector;
 
-// Color constants (imported from config.h)
-extern uint16_t BG_COLOR;
-extern uint16_t BUTTON_COLOR;
-extern uint16_t BUTTON_SELECTED_COLOR;
-extern uint16_t TEXT_COLOR;
-extern uint16_t BUTTON_TEXT_COLOR;
-extern uint16_t CONFIRM_COLOR;
-extern uint16_t CANCEL_COLOR;
-extern uint16_t CLEAR_COLOR;
+// Color constants are #define macros from config.h — no extern declarations needed.
 
 // External state variables (declared in main .ino)
-extern int currentPage;
+extern Page currentPage;
 extern float selectedTemp, selectedVol1, selectedVol2, selectedConc, selectedSpeed;
 extern float tempSelection;
 extern bool motorsHomed;
@@ -31,8 +23,8 @@ extern bool isPrinting;
 extern bool syringesTempReached;
 extern bool shutdownInProgress;
 extern bool calibrationComplete;
-extern long retractionStartTime;
-extern long shutdownStartTime;
+extern unsigned long retractionStartTime;
+extern unsigned long shutdownStartTime;
 extern unsigned long tempStableTime;
 extern SystemConfig config;
 extern float extrusionVolume;
@@ -47,7 +39,7 @@ extern float currentTemperatures[4];
 extern long arduino_pos1, arduino_pos2;
 extern float cycleStartDispensed1, cycleStartDispensed2;
 extern float cycleTargetVol1, cycleTargetVol2;
-extern int current_state;
+extern SystemState current_state;
 
 // Font constants (from GigaDisplay library)
 extern const GFXfont FreeSansBold18pt7b;
@@ -55,6 +47,10 @@ extern const GFXfont FreeSansBold12pt7b;
 extern const GFXfont FreeSans9pt7b;
 
 // ==================== PAGE DRAWING FUNCTIONS ====================
+// Forward declarations for helpers called before their definitions in this file
+void drawHomeButton(int x, int y, const char* label, float value, const char* unit);
+void drawParameterSummary(int x, int y, const char* label, float value, const char* unit);
+void getCurrentPageInfo(const char** title, const char** unit);
 
 void drawMotorZeroCheckPage() {
   display.fillScreen(BG_COLOR);
@@ -1373,19 +1369,19 @@ void handleHomeTouch(int x, int y) {
     if (y >= 120 && y <= 210) {
       currentPage = TEMPERATURE_PAGE;
       tempSelection = selectedTemp;
-      drawParameterPage(tempOptions, numTempOptions, tempSelection, "Temperature", "C");
+      drawParameterPage((int*)TEMP_OPTIONS, NUM_TEMP_OPTIONS, tempSelection, "Temperature", "C");
     } else if (y >= 230 && y <= 320) {
       currentPage = VOLUME1;
       tempSelection = selectedVol1;
-      drawParameterPage(volOptions, numVolOptions, tempSelection, "Volume 1", "mL");
+      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, tempSelection, "Volume 1", "mL");
     } else if (y >= 340 && y <= 430) {
       currentPage = VOLUME2;
       tempSelection = selectedVol2;
-      drawParameterPage(volOptions, numVolOptions, tempSelection, "Volume 2", "mL");
+      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, tempSelection, "Volume 2", "mL");
     } else if (y >= 450 && y <= 540) {
       currentPage = CONCENTRATION;
       tempSelection = selectedConc;
-      drawParameterPage(concOptions, numConcOptions, tempSelection, "Concentration", "%");
+      drawParameterPage((int*)CONC_OPTIONS, NUM_CONC_OPTIONS, tempSelection, "Concentration", "%");
     }
   }
   
@@ -1421,20 +1417,20 @@ void handleParameterTouch(int x, int y, int* options, int numOptions, float* tar
   
   if (currentPage == TEMPERATURE_PAGE) {
     step = 1.0f;
-    minVal = tempOptions[0];
-    maxVal = tempOptions[numTempOptions - 1];
+    minVal = TEMP_OPTIONS[0];
+    maxVal = TEMP_OPTIONS[NUM_TEMP_OPTIONS - 1];
   } else if (currentPage == VOLUME1 || currentPage == VOLUME2) {
     step = 0.1f;
     minVal = 0.1f;
     maxVal = 10.0f;
   } else if (currentPage == CONCENTRATION) {
     step = 5.0f;
-    minVal = concOptions[0];
-    maxVal = concOptions[numConcOptions - 1];
+    minVal = CONC_OPTIONS[0];
+    maxVal = CONC_OPTIONS[NUM_CONC_OPTIONS - 1];
   } else if (currentPage == SPEED) {
     step = 0.1f;
-    minVal = speedOptions[0];
-    maxVal = speedOptions[numSpeedOptions - 1];
+    minVal = SPEED_OPTIONS[0];
+    maxVal = SPEED_OPTIONS[NUM_SPEED_OPTIONS - 1];
   }
   
   if (x >= boxX && x <= boxX + buttonSize && y >= boxY && y <= boxY + boxHeight) {
@@ -1540,15 +1536,15 @@ void handlePrintConfirmTouch(int x, int y) {
     // Skip executeLoad - motors are already positioned from homing!
     current_state = LOAD;  // Just set the state
     
-    if (!executeSetup(selectedVol1, selectedVol2, selectedConc)) {
+    if (!executeSetup(config, selectedVol1, selectedVol2, selectedConc)) {
       drawErrorPage("Setup failed");
       currentPage = ERROR_PAGE;
       return;
     }
     drawLoadingPage();
     delay(500);
-    
-    if (!executePrime()) {
+
+    if (!executePrime(config)) {
       drawErrorPage("Prime failed");
       currentPage = ERROR_PAGE;
       return;
@@ -1627,7 +1623,7 @@ void handleExtrusionSetupTouch(int x, int y) {
   // START button
   if (x >= 90 && x <= 390 && y >= 600 && y <= 680) {
     // VALIDATE EXTRUSION BEFORE STARTING
-    ExtrusionValidation validation = validateExtrusion(extrusionVolume, printTime);
+    ExtrusionValidation validation = validateExtrusion(config, extrusionVolume, printTime);
     
     if (!validation.is_valid) {
       // Show validation error with suggestions
