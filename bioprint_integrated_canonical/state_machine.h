@@ -1,6 +1,5 @@
 /*
  * BioPrint AM - State Machine & Data Structures
- * Phase 6: State Machine & Extrusion Logic Library
  * 
  * Defines:
  * - All system states
@@ -100,7 +99,6 @@ struct ExtrusionValidation {
 // ==================== CYCLE TRACKING STRUCT ====================
 /*
  * Optional: tracks progress within multi-cycle print jobs
- * (Not heavily used in current firmware, but included for future enhancement)
  */
 struct CycleTracking {
   float cycle_start_dispensed1 = 0.0f;  // Cumulative dispensed at cycle start
