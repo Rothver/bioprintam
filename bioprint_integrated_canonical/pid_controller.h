@@ -24,8 +24,8 @@
  * - Thermistor reading via thermistor_sensor.h functions
  * 
  * Usage:
- *   #include "config/config.h"
- *   #include "libraries/thermistor_sensor.h"
+ *   #include "config.h"
+ *   #include "thermistor_sensor.h"
  *   #include "pid_controller.h"
  *   
  *   // Global PID state

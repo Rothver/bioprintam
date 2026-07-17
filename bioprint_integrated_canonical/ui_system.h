@@ -48,7 +48,6 @@ extern const GFXfont FreeSans9pt7b;
 // Functions declared in main file
 extern void calibrateMotorsOnStartup();
 extern bool homeMotors();
-extern bool moveMotorsTo();
 
 
 // ==================== PAGE DRAWING FUNCTIONS ====================

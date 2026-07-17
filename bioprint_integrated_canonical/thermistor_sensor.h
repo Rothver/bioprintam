@@ -16,7 +16,7 @@
  * - SYSTEM_SENSOR: Beta 3950K, used on pins A2, A3
  * 
  * Usage:
- *   #include "config/config.h"
+ *   #include "config.h"
  *   #include "thermistor_sensor.h"
  *   
  *   float temp = readThermistor(A0, HEAT_MAT_SENSOR);
@@ -118,17 +118,17 @@ inline float readThermistor(int pinNumber, int sensorType) {
  * Used by integrated firmware to update all sensors at once.
  * 
  * Parameters:
- *   tempArray: Float array of size 4 to store results
+ *   thermistorArray: Float array of size 4 to store results
  *              [0] = Heat mat sensor 1 (A0, HEAT_MAT_SENSOR)
  *              [1] = Heat mat sensor 2 (A1, HEAT_MAT_SENSOR)
  *              [2] = System sensor 1 (A2, SYSTEM_SENSOR)
  *              [3] = System sensor 2 (A3, SYSTEM_SENSOR)
  */
-inline void readAllThermistors(float tempArray[4]) {
-  tempArray[0] = readThermistor(THERMISTOR_PIN_A0, HEAT_MAT_SENSOR);
-  tempArray[1] = readThermistor(THERMISTOR_PIN_A1, HEAT_MAT_SENSOR);
-  tempArray[2] = readThermistor(THERMISTOR_PIN_A2, SYSTEM_SENSOR);
-  tempArray[3] = readThermistor(THERMISTOR_PIN_A3, SYSTEM_SENSOR);
+inline void readAllThermistors(float thermistorArray[4]) {
+  thermistorArray[0] = readThermistor(THERMISTOR_PIN_A0, HEAT_MAT_SENSOR);
+  thermistorArray[1] = readThermistor(THERMISTOR_PIN_A1, HEAT_MAT_SENSOR);
+  thermistorArray[2] = readThermistor(THERMISTOR_PIN_A2, SYSTEM_SENSOR);
+  thermistorArray[3] = readThermistor(THERMISTOR_PIN_A3, SYSTEM_SENSOR);
 }
 
 // ==================== HELPER: AVERAGE VALID READINGS ====================

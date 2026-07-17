@@ -1,6 +1,5 @@
 /*
  * BioPrint AM - Extrusion Helper Functions
- * Phase 6: State Machine & Extrusion Logic Library
  * 
  * Contains:
  * - Extrusion validation logic (boost system constraints)
@@ -9,9 +8,9 @@
  * - executePrime() - prime position memory
  * 
  * Dependencies:
- * - config/config.h (for motor constants)
- * - libraries/motor_controller.h (for moveMotorsTimedSync)
- * - libraries/state_machine.h (for structs and enums)
+ * - config.h (for motor constants)
+ * - motor_controller.h (for moveMotorsTimedSync)
+ * - state_machine.h (for structs and enums)
  */
 
 #ifndef EXTRUSION_HELPERS_H
@@ -19,7 +18,7 @@
 
 #include "state_machine.h"
 
-// Forward declarations (functions implemented in main sketch or motor_controller.h)
+// Forward declarations 
 extern bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, float speed2_mms, float duration_sec);
 extern long arduino_pos1;
 extern long arduino_pos2;
