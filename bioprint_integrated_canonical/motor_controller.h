@@ -179,6 +179,81 @@ inline void haltAndSetPosition(long pos1, long pos2) {
   delay(20);
 }
 
+inline bool waitForArrival(long target1, long target2) {
+  unsigned long start_time = millis();
+  
+  int consecutive_arrivals = 0;
+  const int REQUIRED_CONSECUTIVE = 3;
+  
+  long last_pos1 = arduino_pos1;
+  long last_pos2 = arduino_pos2;
+  int stationary_count = 0;
+  const int MAX_STATIONARY = 20;
+  
+  while (true) {
+    tic1.resetCommandTimeout();
+    tic2.resetCommandTimeout();
+    
+    long pos1 = tic1.getCurrentPosition();
+    long pos2 = tic2.getCurrentPosition();
+    
+    uint16_t err1 = tic1.getErrorStatus();
+    uint16_t err2 = tic2.getErrorStatus();
+    
+    if (err1 != 0 || err2 != 0) {
+      arduino_pos1 = pos1;
+      arduino_pos2 = pos2;
+      return false;
+    }
+    
+    if (pos1 == last_pos1 && pos2 == last_pos2) {
+      stationary_count++;
+      
+      if (stationary_count >= MAX_STATIONARY) {
+        bool at_target1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
+        bool at_target2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
+        
+        if (at_target1 && at_target2) {
+          arduino_pos1 = target1;
+          arduino_pos2 = target2;
+          return true;
+        } else {
+          arduino_pos1 = pos1;
+          arduino_pos2 = pos2;
+          return false;
+        }
+      }
+    } else {
+      stationary_count = 0;
+      last_pos1 = pos1;
+      last_pos2 = pos2;
+    }
+    
+    bool arrived1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
+    bool arrived2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
+    
+    if (arrived1 && arrived2) {
+      consecutive_arrivals++;
+      
+      if (consecutive_arrivals >= REQUIRED_CONSECUTIVE) {
+        arduino_pos1 = target1;
+        arduino_pos2 = target2;
+        return true;
+      }
+    } else {
+      consecutive_arrivals = 0;
+    }
+    
+    if (millis() - start_time > 60000) {
+      arduino_pos1 = pos1;
+      arduino_pos2 = pos2;
+      return false;
+    }
+    
+    delay(50);
+  }
+}
+
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
 
 /*
@@ -218,82 +293,7 @@ inline bool moveMotorsTo(long target1, long target2, float speed_mms) {
   tic1.setTargetPosition(target1);
   tic2.setTargetPosition(target2);
   
-  unsigned long start_time = millis();
-  
-  int consecutive_arrivals = 0;
-  const int REQUIRED_CONSECUTIVE = 3;
-  
-  long last_pos1 = arduino_pos1;
-  long last_pos2 = arduino_pos2;
-  int stationary_count = 0;
-  const int MAX_STATIONARY = 20;
-  
-  while (true) {
-    tic1.resetCommandTimeout();
-    tic2.resetCommandTimeout();
-    
-    long pos1 = tic1.getCurrentPosition();
-    long pos2 = tic2.getCurrentPosition();
-    
-    uint16_t err1 = tic1.getErrorStatus();
-    uint16_t err2 = tic2.getErrorStatus();
-    
-    // Error handling: exit if TIC reports errors
-    if (err1 != 0 || err2 != 0) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    // Stationary detection: if no movement for MAX_STATIONARY checks
-    if (pos1 == last_pos1 && pos2 == last_pos2) {
-      stationary_count++;
-      
-      if (stationary_count >= MAX_STATIONARY) {
-        bool at_target1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-        bool at_target2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-        
-        if (at_target1 && at_target2) {
-          arduino_pos1 = target1;
-          arduino_pos2 = target2;
-          return true;
-        } else {
-          arduino_pos1 = pos1;
-          arduino_pos2 = pos2;
-          return false;
-        }
-      }
-    } else {
-      stationary_count = 0;
-      last_pos1 = pos1;
-      last_pos2 = pos2;
-    }
-    
-    // Arrival detection: require 3 consecutive confirmations
-    bool arrived1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-    bool arrived2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-    
-    if (arrived1 && arrived2) {
-      consecutive_arrivals++;
-      
-      if (consecutive_arrivals >= REQUIRED_CONSECUTIVE) {
-        arduino_pos1 = target1;
-        arduino_pos2 = target2;
-        return true;
-      }
-    } else {
-      consecutive_arrivals = 0;
-    }
-    
-    // Timeout: 60 seconds maximum movement time
-    if (millis() - start_time > 60000) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    delay(50);
-  }
+  return waitForArrival(target1, target2);
 }
 
 /*
@@ -323,78 +323,7 @@ inline bool moveMotorsToWithSetSpeeds(long target1, long target2) {
   tic1.setTargetPosition(target1);
   tic2.setTargetPosition(target2);
   
-  unsigned long start_time = millis();
-  
-  int consecutive_arrivals = 0;
-  const int REQUIRED_CONSECUTIVE = 3;
-  
-  long last_pos1 = arduino_pos1;
-  long last_pos2 = arduino_pos2;
-  int stationary_count = 0;
-  const int MAX_STATIONARY = 20;
-  
-  while (true) {
-    tic1.resetCommandTimeout();
-    tic2.resetCommandTimeout();
-    
-    long pos1 = tic1.getCurrentPosition();
-    long pos2 = tic2.getCurrentPosition();
-    
-    uint16_t err1 = tic1.getErrorStatus();
-    uint16_t err2 = tic2.getErrorStatus();
-    
-    if (err1 != 0 || err2 != 0) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    if (pos1 == last_pos1 && pos2 == last_pos2) {
-      stationary_count++;
-      
-      if (stationary_count >= MAX_STATIONARY) {
-        bool at_target1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-        bool at_target2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-        
-        if (at_target1 && at_target2) {
-          arduino_pos1 = target1;
-          arduino_pos2 = target2;
-          return true;
-        } else {
-          arduino_pos1 = pos1;
-          arduino_pos2 = pos2;
-          return false;
-        }
-      }
-    } else {
-      stationary_count = 0;
-      last_pos1 = pos1;
-      last_pos2 = pos2;
-    }
-    
-    bool arrived1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-    bool arrived2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-    
-    if (arrived1 && arrived2) {
-      consecutive_arrivals++;
-      
-      if (consecutive_arrivals >= REQUIRED_CONSECUTIVE) {
-        arduino_pos1 = target1;
-        arduino_pos2 = target2;
-        return true;
-      }
-    } else {
-      consecutive_arrivals = 0;
-    }
-    
-    if (millis() - start_time > 60000) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    delay(50);
-  }
+  return waitForArrival(target1, target2);
 }
 
 /*
@@ -490,6 +419,7 @@ inline bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, fl
   
   return true;
 }
+
 
 // ==================== EMERGENCY HALT ====================
 

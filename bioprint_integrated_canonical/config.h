@@ -11,26 +11,10 @@
  * - STEPS_PER_ML: Set to 1009.0f (baseline from motor_controls.ino reference calibration)
  * - ADC Resolution: Unified to 12-bit (4095) for Arduino GIGA board
  * - Thermistor Beta: 3435 for heat mats, 3950 for system sensors
- * 
- * Device Variants:
- * Compile with -DDEVICE_TYPE=<variant> to include only necessary features:
- * - INTEGRATED_TEMP: Full firmware with UI, motors, temperature control (default)
- * - MOTOR_ONLY: Motor control via serial interface (no UI, no temperature)
- * - HEAT_CHAMBER: Thermistor logging only (no motor control, no UI)
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
-
-// ==================== DEVICE TYPE VARIANT ====================
-// Define at compile time: -DDEVICE_TYPE=INTEGRATED_TEMP (default)
-#ifndef DEVICE_TYPE
-  #define DEVICE_TYPE INTEGRATED_TEMP
-#endif
-
-#define INTEGRATED_TEMP 0
-#define MOTOR_ONLY 1
-#define HEAT_CHAMBER 2
 
 // ==================== MOTOR CONFIGURATION ====================
 // I2C Addresses for Pololu TIC T825 stepper drivers
@@ -118,24 +102,4 @@
 
 // UI state machine timing
 #define UI_UPDATE_INTERVAL 100  // milliseconds
-
-// ==================== FEATURE FLAGS ====================
-// Conditionally enable features based on device type
-#if (DEVICE_TYPE == INTEGRATED_TEMP)
-  #define ENABLE_UI 1
-  #define ENABLE_MOTOR 1
-  #define ENABLE_TEMP_CONTROL 1
-  #define ENABLE_THERMISTOR 1
-#elif (DEVICE_TYPE == MOTOR_ONLY)
-  #define ENABLE_UI 0
-  #define ENABLE_MOTOR 1
-  #define ENABLE_TEMP_CONTROL 0
-  #define ENABLE_THERMISTOR 0
-#elif (DEVICE_TYPE == HEAT_CHAMBER)
-  #define ENABLE_UI 0
-  #define ENABLE_MOTOR 0
-  #define ENABLE_TEMP_CONTROL 0
-  #define ENABLE_THERMISTOR 1
-#endif
-
 #endif  // CONFIG_H

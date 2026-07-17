@@ -152,10 +152,10 @@ inline void updateTemperatures() {
   readAllThermistors(currentTemperatures);
   
   // Average heat mat sensors (A0, A1)
-  Input_HeatMatTemp = averageReadings(currentTemperatures[0], currentTemperatures[1]);
+  Input_HeatMat = averageReadings(currentTemperatures[0], currentTemperatures[1]);
   
   // Average system sensors (A2, A3) and update display temp
-  Input_SyringeTemp = averageReadings(currentTemperatures[2], currentTemperatures[3]);
+  Input_Syringe = averageReadings(currentTemperatures[2], currentTemperatures[3]);
   if (currentTemperatures[2] > -999.0f) {
     currentDisplayTemp = currentTemperatures[2];
   } else if (currentTemperatures[3] > -999.0f) {
@@ -166,7 +166,7 @@ inline void updateTemperatures() {
   
   // Check if syringes have reached target temperature
   // Temperature is stable when within TEMP_TOLERANCE of setpoint
-  if (Input_SyringeTemp > -999.0f && abs(Input_SyringeTemp - SETPOINT_SYRINGE) <= TEMP_TOLERANCE) {
+  if (Input_Syringe > -999.0f && abs(Input_Syringe - SETPOINT_SYRINGE) <= TEMP_TOLERANCE) {
     syringesTempReached = true;
   } else {
     syringesTempReached = false;
@@ -192,19 +192,19 @@ inline void updateTemperatures() {
  */
 inline void computeDualPID() {
   // Disable outputs if control is off or sensors are reading invalid temps
-  if (!heatControlEnabled || Input_HeatMatTemp < 0 || Input_SyringeTemp < 0) {
+  if (!heatControlEnabled || Input_HeatMat < 0 || Input_Syringe < 0) {
     Output_HeatMat = 0.0f;
     Output_Syringe = 0.0f;
     return;
   }
   
   // Compute P-only output for heat mat zone
-  float error_HeatMat = SETPOINT_HEAT_MAT - Input_HeatMatTemp;
+  float error_HeatMat = SETPOINT_HEAT_MAT - Input_HeatMat;
   Output_HeatMat = KP_HEAT_MAT * error_HeatMat;
   Output_HeatMat = constrain(Output_HeatMat, 0.0f, 255.0f);
   
   // Compute P-only output for syringe zone
-  float error_Syringe = SETPOINT_SYRINGE - Input_SyringeTemp;
+  float error_Syringe = SETPOINT_SYRINGE - Input_Syringe;
   Output_Syringe = KP_SYRINGE * error_Syringe;
   Output_Syringe = constrain(Output_Syringe, 0.0f, 255.0f);
 }
@@ -268,7 +268,7 @@ inline bool isSyringeTempStable() {
  *   true if heat mat reading is valid (> -999)
  */
 inline bool isHeatMatTempValid() {
-  return Input_HeatMatTemp > -999.0f;
+  return Input_HeatMat > -999.0f;
 }
 
 /*
@@ -278,7 +278,7 @@ inline bool isHeatMatTempValid() {
  *   true if syringe reading is valid (> -999)
  */
 inline bool isSyringeTempValid() {
-  return Input_SyringeTemp > -999.0f;
+  return Input_Syringe > -999.0f;
 }
 
 #endif  // PID_CONTROLLER_H
