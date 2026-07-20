@@ -166,7 +166,7 @@ inline void updateTemperatures() {
   
   // Check if syringes have reached target temperature
   // Temperature is stable when within TEMP_TOLERANCE of setpoint
-  if (Input_Syringe > -999.0f && abs(Input_Syringe - SETPOINT_SYRINGE) <= TEMP_TOLERANCE) {
+  if (Input_Syringe > -999.0f && abs(Input_Syringe - Setpoint_Syringe) <= TEMP_TOLERANCE) {
     syringesTempReached = true;
   } else {
     syringesTempReached = false;
@@ -188,7 +188,7 @@ inline void updateTemperatures() {
  * - Output clamped to [0, 255] (PWM range)
  * - Control disabled entirely if heatControlEnabled = false
  * - Heat mat: Kp = KP_HEAT_MAT, setpoint = SETPOINT_HEAT_MAT (80°C)
- * - Syringe: Kp = KP_SYRINGE, setpoint = SETPOINT_SYRINGE (35°C)
+ * - Syringe: Kp = KP_SYRINGE, setpoint = Setpoint_Syringe (user-adjustable, default 35°C)
  */
 inline void computeDualPID() {
   // Disable outputs if control is off or sensors are reading invalid temps
@@ -204,7 +204,7 @@ inline void computeDualPID() {
   Output_HeatMat = constrain(Output_HeatMat, 0.0f, 255.0f);
   
   // Compute P-only output for syringe zone
-  float error_Syringe = SETPOINT_SYRINGE - Input_Syringe;
+  float error_Syringe = Setpoint_Syringe - Input_Syringe;
   Output_Syringe = KP_SYRINGE * error_Syringe;
   Output_Syringe = constrain(Output_Syringe, 0.0f, 255.0f);
 }
