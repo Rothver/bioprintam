@@ -48,6 +48,8 @@ extern const GFXfont FreeSans9pt7b;
 // Functions declared in main file
 extern void calibrateMotorsOnStartup();
 extern bool homeMotors();
+extern long pendingTargetPos1;
+extern long pendingTargetPos2;
 
 
 // ==================== PAGE DRAWING FUNCTIONS ====================
@@ -1852,27 +1854,18 @@ void handleLoadingSyringesTouch(int x, int y) {
 
 void handleWaitingForSyringesTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 600 && y <= 680) {
-    currentPage = HOMING_PAGE;
-    drawHomingPage();
-    
-    // Small delay to show the homing page
-    delay(100);
-    
+
     // Move motors to the target volume positions
     long target1 = 1600 + mlToSteps(selectedVol1);
     long target2 = 1600 + mlToSteps(selectedVol2);
     
-    if (!moveMotorsTo(target1, target2, 2.0)) {
-      drawErrorPage("Failed to reach volume position!");
-      currentPage = ERROR_PAGE;
-      return;
-    }
+    pendingTargetPos1 = target1;
+    pendingTargetPos2 = target2;
+
+    currentPage = HOMING_PAGE;
+    drawHomingPage();
     
-    arduino_pos1 = target1;
-    arduino_pos2 = target2;
-    
-    currentPage = PRINT_CONFIRM;
-    drawPrintConfirmPage();
+    return;    
   }
   
   if (x >= 170 && x <= 310 && y >= 710 && y <= 770) {

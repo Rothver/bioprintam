@@ -43,6 +43,8 @@
 #include <Wire.h>
 #include "config.h"
 
+const int MAX_STATIONARY = 20;
+
 // ==================== EXTERNAL MOTOR OBJECTS ====================
 // Must be declared in main sketch:
 extern TicI2C tic1;
@@ -89,6 +91,16 @@ inline long mmsToStepsPerSec(float mm_per_s) {
 inline long stepsPerSecToTicUnits(long steps_per_sec) {
   return steps_per_sec * 10000L;
 }
+
+enum MotorMoveStatus { MOVING, ARRIVED, FAILED};
+
+struct MotorMoveState {
+  long target1, target2;
+  unsigned long start_time;
+  long last_pos1, last_pos2;
+  int stationary_count;
+  int consecutive_arrivals;
+};
 
 // ==================== MOTOR INITIALIZATION ====================
 
@@ -188,7 +200,7 @@ inline bool waitForArrival(long target1, long target2) {
   long last_pos1 = arduino_pos1;
   long last_pos2 = arduino_pos2;
   int stationary_count = 0;
-  const int MAX_STATIONARY = 20;
+  
   
   while (true) {
     tic1.resetCommandTimeout();
@@ -255,6 +267,86 @@ inline bool waitForArrival(long target1, long target2) {
 }
 
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
+
+
+inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms) {
+  syncPositionToTIC();
+  tic1.clearDriverError();
+  tic2.clearDriverError();
+  tic1.exitSafeStart();
+  tic2.exitSafeStart();
+  long speed_steps = mmsToStepsPerSec(speed_mms);
+  tic1.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
+  tic2.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
+  tic1.setTargetPosition(target1);
+  tic2.setTargetPosition(target2);
+
+  state.target1 = target1;
+  state.target2 = target2;
+  state.start_time = millis();
+  state.last_pos1 = arduino_pos1;
+  state.last_pos2 = arduino_pos2;
+  state.stationary_count = 0;
+  state.consecutive_arrivals = 0;
+}
+
+inline MotorMoveStatus pollMotorMove(MotorMoveState &state){
+  tic1.resetCommandTimeout();
+  tic2.resetCommandTimeout();
+
+  long pos1 = tic1.getCurrentPosition();
+  long pos2 = tic2.getCurrentPosition();
+  uint16_t err1 = tic1.getErrorStatus();
+  uint16_t err2 = tic2.getErrorStatus();
+
+  if (err1 != 0 || err2 != 0) {
+    arduino_pos1 = pos1;
+    arduino_pos2 = pos2;
+    return FAILED;
+  }
+
+  if (pos1 == state.last_pos1 && pos2 == state.last_pos2){
+    state.stationary_count++;
+    if (state.stationary_count >= MAX_STATIONARY) {
+      bool at_target1 = abs(pos1 - state.target1) <= POSITION_TOLERANCE;
+      bool at_target2 = abs(pos2 - state.target2) <= POSITION_TOLERANCE;
+      if (at_target1 && at_target2) {
+        arduino_pos1 = state.target1;
+        arduino_pos2 = state.target2;
+        return ARRIVED;
+      } else {
+        arduino_pos1 = pos1;
+        arduino_pos2 = pos2;
+        return FAILED;
+      }
+    }
+  } else {
+    state.stationary_count = 0;
+    state.last_pos1 = pos1;
+    state.last_pos2 = pos2;
+  }
+
+  bool arrived1 = abs(pos1 - state.target1) <= POSITION_TOLERANCE;
+  bool arrived2 = abs(pos2 - state.target2) <= POSITION_TOLERANCE;
+  
+  if (arrived1 && arrived2) {
+    state.consecutive_arrivals++;
+    if (state.consecutive_arrivals >= 3) {
+      arduino_pos1 = state.target1;
+      arduino_pos2 = state.target2;
+      return ARRIVED;
+    }
+  } else {
+    state.consecutive_arrivals = 0;
+  }
+
+  if (millis() - state.start_time > 60000) {
+    arduino_pos1 = pos1;
+    arduino_pos2 = pos2;
+    return FAILED;
+  }
+  return MOVING;
+}
 
 /*
  * Move both motors to target positions at specified speed
@@ -384,12 +476,12 @@ inline bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, fl
     long pos2 = tic2.getCurrentPosition();
     
     // Track when each motor arrives at its target
-    if (!m1_arrived && abs(pos1 - target1) <= 50) {
+    if (!m1_arrived && abs(pos1 - target1) <= POSITION_TOLERANCE) {
       m1_arrived = true;
       m1_finish_time = millis() - start_time;
     }
     
-    if (!m2_arrived && abs(pos2 - target2) <= 50) {
+    if (!m2_arrived && abs(pos2 - target2) <= POSITION_TOLERANCE) {
       m2_arrived = true;
       m2_finish_time = millis() - start_time;
     }

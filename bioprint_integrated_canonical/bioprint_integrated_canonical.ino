@@ -87,6 +87,8 @@ unsigned long tempStableTime = 0;
 long arduino_pos1 = 0;
 long arduino_pos2 = 0;
 bool motorsHomed = false;
+long pendingTargetPos1 = 0;
+long pendingTargetPos2 = 0;
 
 // ==================== UI PARAMETER STORAGE ====================
 float selectedTemp = -1;
@@ -304,6 +306,35 @@ void loop() {
     return;
   }
   retractionStarted = false;
+
+  static MotorMoveState volumnMoveState;
+  static bool volumeMoveStarted = false;
+  if (currentPage == HOMING_PAGE) {
+    if (!volumeMoveStarted) {
+      startMotorMove(volumnMoveState, pendingTargetPos1, pendingTargetPos2, 2.0);
+      volumeMoveStarted = true;
+    }
+
+    drawHomingPage();
+    MotorMoveStatus status = pollMotorMove(volumnMoveState);
+
+    if (status == ARRIVED) {
+      volumeMoveStarted = false;
+      arduino_pos1 = volumnMoveState.target1;
+      arduino_pos2 = volumnMoveState.target2;
+      currentPage = PRINT_CONFIRM;
+      drawPrintConfirmPage();
+    } else if (status == FAILED) {
+      volumeMoveStarted = false;
+      emergencyHalt();
+      drawErrorPage("Motor move failed");
+      currentPage = ERROR_PAGE;
+    }
+
+    delay(50);
+
+    return;
+  }
 
   // ---- 3. Extrusion execution (blocking while printing) ----
   // isPrinting is set by handleReadyToPrintTouch when PRINT is pressed.
