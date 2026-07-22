@@ -365,6 +365,13 @@ void loop() {
     if (!lastTouchState) {
       lastTouchState = true;
 
+      if (heatControlEnabled && (touchX >= 400 && touchX <= 460) && (touchY >= 10 && touchY <= 50)) {
+        heatControlEnabled = false;
+        analogWrite(MOSFET_PIN, 0);
+        Serial.println("Heat control forced off by user (manual kill switch)");
+        return;
+      }
+
       switch (currentPage) {
         case MOTOR_ZERO_CHECK:
           handleMotorZeroCheckTouch(touchX, touchY);
@@ -470,35 +477,6 @@ void loop() {
   }
 
   delay(10);
-}
 
-/*
- * ========== NOTES FOR CONSOLIDATION ==========
- * 
- * PHASE 7 CONSOLIDATION:
- * This canonical version represents the unified firmware for both variants:
- * 
- * 1. Standard Build (Default):
- *    - Requires temperature validation
- *    - Full PID control
- *    - All safety checks enabled
- *    - Compile and upload as-is
- * 
- * 2. No-Temp-Req Build:
- *    - Uncomment #define SKIP_TEMP_VALIDATION (line ~32)
- *    - Compile and upload with that flag
- *    - Temperature checks bypassed but system remains functional
- * 
- * ALL CORE IMPLEMENTATIONS:
- * - Motor control functions fully defined in this file (inline for performance)
- * - Library calls used for: thermistor reading, PID control, UI system, state machine, extrusion helpers
- * - No duplicate code across firmware variants
- * - Single source of truth for all logic
- * 
- * DEPRECATED FILES:
- * - bioprint_integrated_v3.1_FIXED.ino (replaced by canonical version)
- * - bioprint_integrated_v3.1_NO_TEMP_REQ.ino (replaced by conditional compilation flag)
- * 
- * BUILD INSTRUCTIONS:
- * See README.md for compilation and deployment procedures
- */
+  drawHeatIndicator();
+}

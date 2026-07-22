@@ -95,6 +95,7 @@
 #define CONFIRM_COLOR 0xA9CF         // Light green (confirm)
 #define CANCEL_COLOR 0xF800          // Red (cancel)
 #define CLEAR_COLOR 0xFD20           // Light color
+#define HEAT_ACTIVE_COLOR 0xFC60      // Amber (heat active)
 
 // ==================== TIMING CONSTANTS ====================
 // Motor zero retraction

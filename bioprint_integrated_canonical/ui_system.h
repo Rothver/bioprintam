@@ -1874,4 +1874,21 @@ void handleWaitingForSyringesTouch(int x, int y) {
   }
 }
 
+void drawHeatIndicator(){
+  static bool wasHeatOn = false;
+  if (heatControlEnabled) {
+    display.fillRoundRect(400, 10, 60, 40, 10, HEAT_ACTIVE_COLOR);
+    display.setFont(&FreeSans9pt7b);
+    display.setTextColor(BUTTON_TEXT_COLOR);
+    display.setCursor(410, 35);
+    display.print("HEAT");
+    wasHeatOn = true;
+    return;
+  } else if (wasHeatOn){
+    display.fillRoundRect(400, 10, 60, 40, 10, BG_COLOR);
+    wasHeatOn = false;
+    return;
+  } 
+}
+
 #endif // UI_SYSTEM_H
