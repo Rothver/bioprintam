@@ -269,15 +269,15 @@ inline bool waitForArrival(long target1, long target2) {
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
 
 
-inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms) {
+inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms1, float speed_mms2) {
   syncPositionToTIC();
   tic1.clearDriverError();
   tic2.clearDriverError();
   tic1.exitSafeStart();
   tic2.exitSafeStart();
-  long speed_steps = mmsToStepsPerSec(speed_mms);
-  tic1.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
-  tic2.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
+
+  tic1.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms1)));
+  tic2.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms2)));
   tic1.setTargetPosition(target1);
   tic2.setTargetPosition(target2);
 
