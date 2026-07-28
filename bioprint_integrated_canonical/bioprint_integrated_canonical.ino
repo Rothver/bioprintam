@@ -78,10 +78,12 @@ TicI2C tic2;
 // All state and page enums moved to libraries/state_machine.h
 SystemState current_state = UNINITIALIZED;
 Page currentPage = WELCOME;
+ExtrusionPlan extrusionPlan;
 
 // System state tracking (temperature stabilization is now in pid_controller.h)
 bool systemReady = false;
 unsigned long tempStableTime = 0;
+enum {PHASE_NONE, PHASE_ONE, PHASE_TWO} extrusionPhase = PHASE_NONE;  
 
 // ==================== POSITION TRACKING ====================
 long arduino_pos1 = 0;
@@ -336,21 +338,62 @@ void loop() {
     return;
   }
 
-  // ---- 3. Extrusion execution (blocking while printing) ----
+  static MotorMoveState extrusionMoveState;
+  // ---- 3. Extrusion execution ----
   // isPrinting is set by handleReadyToPrintTouch when PRINT is pressed.
   if (isPrinting && currentPage == PRINTING_PAGE) {
-    bool ok = executeExtrude(config, extrusionVolume, printTime);
-    isPrinting = false;
-    if (ok) {
-      current_state = COMPLETE;
-      currentPage = POST_EXTRUSION_OPTIONS;
-      drawPostExtrusionOptionsPage();
-    } else {
-      emergencyHalt();
-      drawErrorPage("Extrusion failed");
-      currentPage = ERROR_PAGE;
+    if (extrusionPhase == PHASE_NONE) {
+      extrusionPlan = prepareExtrude(config, extrusionVolume, printTime);
+
+      if (!extrusionPlan.ok) {
+        emergencyHalt();
+        drawErrorPage("Extrusion invalid");
+        currentPage = ERROR_PAGE;
+        isPrinting = false;
+        return;
+      }
+      if (extrusionPlan.use_two_phase) {
+        startMotorMove(extrusionMoveState, extrusionPlan.phase1_target1, extrusionPlan.phase1_target2,
+                       extrusionPlan.phase1_speed_m1, extrusionPlan.phase1_speed_m2);
+        extrusionPhase = PHASE_ONE;
+      } else {
+        startMotorMove(extrusionMoveState, extrusionPlan.phase2_target1, extrusionPlan.phase2_target2,
+                       extrusionPlan.phase2_speed_m1, extrusionPlan.phase2_speed_m2);
+        extrusionPhase = PHASE_TWO;
+      }
     }
-    return;
+    MotorMoveStatus status = pollMotorMove(extrusionMoveState);
+
+    if (status == ARRIVED) {
+        if (extrusionPhase == PHASE_ONE) {
+          startMotorMove(extrusionMoveState, extrusionPlan.phase2_target1, extrusionPlan.phase2_target2,
+                         extrusionPlan.phase2_speed_m1, extrusionPlan.phase2_speed_m2);
+          extrusionPhase = PHASE_TWO;
+        } else {
+          arduino_pos1 = extrusionMoveState.target1;
+          arduino_pos2 = extrusionMoveState.target2;
+
+          config.dispensed1 += extrusionPlan.vol1_to_dispense;
+        config.dispensed2 += extrusionPlan.vol2_to_dispense;
+        config.remaining1 -= extrusionPlan.vol1_to_dispense;
+        config.remaining2 -= extrusionPlan.vol2_to_dispense;
+
+        current_state = COMPLETE;
+        currentPage = POST_EXTRUSION_OPTIONS;
+        drawPostExtrusionOptionsPage();
+        isPrinting = false;
+        extrusionPhase = PHASE_NONE;
+        }
+      } else if (status == FAILED) {
+        emergencyHalt();
+        drawErrorPage("Extrusion failed");
+        currentPage = ERROR_PAGE;
+        isPrinting = false;
+        extrusionPhase = PHASE_NONE;
+      }
+
+      delay(50); 
+      return;
   }
 
   // ---- 4. Touch input dispatch ----

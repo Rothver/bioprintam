@@ -96,6 +96,19 @@ struct ExtrusionValidation {
   String suggestion;          // Suggested adjustment to parameters
 };
 
+struct ExtrusionPlan {
+  bool ok;                     // false if extrusion cannot proceed
+  bool use_two_phase;
+
+  long phase1_target1, phase1_target2;
+  float phase1_speed_m1, phase1_speed_m2;
+
+  long phase2_target1, phase2_target2;
+  float phase2_speed_m1, phase2_speed_m2;
+
+  float vol1_to_dispense, vol2_to_dispense; 
+};
+
 // ==================== CYCLE TRACKING STRUCT ====================
 /*
  * Optional: tracks progress within multi-cycle print jobs
