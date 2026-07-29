@@ -102,6 +102,19 @@ struct MotorMoveState {
   int consecutive_arrivals;
 };
 
+struct PendingMove {
+  MotorMoveState moveState;
+  bool active = false;
+  bool phaseStarted = false;
+  uint8_t phaseCount, phaseIndex;
+  long target1_phase1, target2_phase1;
+  long target1_phase2, target2_phase2;
+  float speed1_phase1, speed2_phase1;
+  float speed1_phase2, speed2_phase2;
+  void (*onArrived)();
+  void (*onFailed)();
+};
+
 // ==================== MOTOR INITIALIZATION ====================
 
 /*

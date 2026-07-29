@@ -51,6 +51,7 @@ extern bool homeMotors();
 extern long pendingTargetPos1;
 extern long pendingTargetPos2;
 
+extern PendingMove pendingMove;
 
 // ==================== PAGE DRAWING FUNCTIONS ====================
 // Forward declarations for helpers called before their definitions in this file
@@ -1297,6 +1298,17 @@ void drawValidationErrorPage(String error_msg, String suggestions) {
   display.print("BACK");
 }
 
+void goToPrintConfirmPage() {
+  drawPrintConfirmPage();
+  currentPage = PRINT_CONFIRM;
+}
+
+//Used when motor movement fails
+void goToErrorPage(){
+  drawErrorPage("Motor move failed");
+  currentPage = ERROR_PAGE;
+}
+
 // ==================== TOUCH HANDLERS ====================
 
 void handleMotorZeroCheckTouch(int x, int y) {
@@ -1861,6 +1873,9 @@ void handleWaitingForSyringesTouch(int x, int y) {
     
     pendingTargetPos1 = target1;
     pendingTargetPos2 = target2;
+
+    pendingMove.onArrived = goToPrintConfirmPage;
+    pendingMove.onFailed = goToErrorPage;
 
     currentPage = HOMING_PAGE;
     drawHomingPage();

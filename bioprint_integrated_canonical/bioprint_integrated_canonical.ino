@@ -92,6 +92,8 @@ bool motorsHomed = false;
 long pendingTargetPos1 = 0;
 long pendingTargetPos2 = 0;
 
+PendingMove pendingMove;
+
 // ==================== UI PARAMETER STORAGE ====================
 float selectedTemp = -1;
 float selectedVol1 = -1;
@@ -309,28 +311,25 @@ void loop() {
   }
   retractionStarted = false;
 
-  static MotorMoveState volumnMoveState;
-  static bool volumeMoveStarted = false;
+  
   if (currentPage == HOMING_PAGE) {
-    if (!volumeMoveStarted) {
-      startMotorMove(volumnMoveState, pendingTargetPos1, pendingTargetPos2, 2.0);
-      volumeMoveStarted = true;
+    if (!pendingMove.active) {
+      startMotorMove(pendingMove.moveState, pendingTargetPos1, pendingTargetPos2, 2.0, 2.0);
+      pendingMove.active = true;
     }
 
     drawHomingPage();
-    MotorMoveStatus status = pollMotorMove(volumnMoveState);
+    MotorMoveStatus status = pollMotorMove(pendingMove.moveState);
 
     if (status == ARRIVED) {
-      volumeMoveStarted = false;
-      arduino_pos1 = volumnMoveState.target1;
-      arduino_pos2 = volumnMoveState.target2;
-      currentPage = PRINT_CONFIRM;
-      drawPrintConfirmPage();
+      pendingMove.active = false;
+      arduino_pos1 = pendingMove.moveState.target1;
+      arduino_pos2 = pendingMove.moveState.target2;
+      pendingMove.onArrived();
     } else if (status == FAILED) {
-      volumeMoveStarted = false;
+      pendingMove.active = false;
       emergencyHalt();
-      drawErrorPage("Motor move failed");
-      currentPage = ERROR_PAGE;
+      pendingMove.onFailed();
     }
 
     delay(50);
