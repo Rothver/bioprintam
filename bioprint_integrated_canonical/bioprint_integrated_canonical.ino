@@ -312,10 +312,10 @@ void loop() {
   retractionStarted = false;
 
   
-  if (currentPage == HOMING_PAGE) {
-    if (!pendingMove.active) {
+  if (pendingMove.active) {
+    if (!pendingMove.phaseStarted) {
       startMotorMove(pendingMove.moveState, pendingTargetPos1, pendingTargetPos2, 2.0, 2.0);
-      pendingMove.active = true;
+      pendingMove.phaseStarted = true;
     }
 
     drawHomingPage();

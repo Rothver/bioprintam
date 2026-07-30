@@ -1876,6 +1876,8 @@ void handleWaitingForSyringesTouch(int x, int y) {
 
     pendingMove.onArrived = goToPrintConfirmPage;
     pendingMove.onFailed = goToErrorPage;
+    pendingMove.phaseStarted = false;
+    pendingMove.active = true;
 
     currentPage = HOMING_PAGE;
     drawHomingPage();
