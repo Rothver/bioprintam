@@ -46,7 +46,6 @@ extern const GFXfont FreeSansBold12pt7b;
 extern const GFXfont FreeSans9pt7b;
 
 // Functions declared in main file
-extern void calibrateMotorsOnStartup();
 extern bool homeMotors();
 extern long pendingTargetPos1;
 extern long pendingTargetPos2;
@@ -1309,6 +1308,13 @@ void goToErrorPage(){
   currentPage = ERROR_PAGE;
 }
 
+void onCalibrationArrived() {
+  motorsHomed = true;
+  calibrationComplete = true;
+  currentPage = WELCOME;
+  drawWelcomePage();
+}
+
 // ==================== TOUCH HANDLERS ====================
 
 void handleMotorZeroCheckTouch(int x, int y) {
@@ -1319,13 +1325,24 @@ void handleMotorZeroCheckTouch(int x, int y) {
     drawCalibrationInProgressPage();
     delay(500);  // Show calibration page briefly
     
-    // Run calibration
-    calibrateMotorsOnStartup();
-    calibrationComplete = true;
+    pendingMove.target1_phase1 = 0;
+    pendingMove.target2_phase1 = 0;
+    pendingMove.speed1_phase1 = 1.0;
+    pendingMove.speed2_phase1 = 1.0;
+
+    pendingMove.target1_phase2 = LOAD_POSITION;
+    pendingMove.target2_phase2 = LOAD_POSITION;
+    pendingMove.speed1_phase2 = 2.0;
+    pendingMove.speed2_phase2 = 2.0;
     
-    // Go to welcome page
-    currentPage = WELCOME;
-    drawWelcomePage();
+    pendingMove.phaseCount = 2;
+    pendingMove.phaseIndex = 0;
+    pendingMove.phaseStarted = false;
+    pendingMove.onProgress = drawCalibrationInProgressPage;
+    pendingMove.onArrived = onCalibrationArrived;
+    pendingMove.onFailed = goToErrorPage;
+    pendingMove.active = true;
+
     return;
   }
   
@@ -1834,7 +1851,8 @@ void handleErrorTouch(int x, int y) {
 void handleLoadingSyringesTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 580 && y <= 660) {
     currentPage = HOMING_PAGE;
-    drawHomingPage();
+    pendingMove.onProgress = drawHomingPage;
+    pendingMove.onProgress();
     
     // Small delay to show the homing page
     delay(100);
@@ -1876,11 +1894,12 @@ void handleWaitingForSyringesTouch(int x, int y) {
 
     pendingMove.onArrived = goToPrintConfirmPage;
     pendingMove.onFailed = goToErrorPage;
+    pendingMove.onProgress = drawHomingPage;
     pendingMove.phaseStarted = false;
     pendingMove.active = true;
 
     currentPage = HOMING_PAGE;
-    drawHomingPage();
+    pendingMove.onProgress();
     
     return;    
   }

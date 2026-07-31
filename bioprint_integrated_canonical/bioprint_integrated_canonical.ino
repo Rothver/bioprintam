@@ -192,25 +192,6 @@ bool homeMotors() {
   return ok;
 }
 
-// Establish the full 0–15000 step range on startup.
-// Moves to position 0 (minimum) then to LOAD_POSITION to confirm the
-// controller's coordinate system matches the physical hardware.
-void calibrateMotorsOnStartup() {
-  Serial.println("calibrateMotorsOnStartup(): moving to 0");
-  moveMotorsTo(0, 0, 1.0);
-
-  delay(500);
-
-  Serial.println("calibrateMotorsOnStartup(): moving to LOAD_POSITION (15000)");
-  moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 2.0);
-
-  arduino_pos1 = LOAD_POSITION;
-  arduino_pos2 = LOAD_POSITION;
-  motorsHomed  = true;
-
-  Serial.println("calibrateMotorsOnStartup(): complete");
-}
-
 // ==================== SETUP ====================
 void setup() {
   Serial.begin(115200);
@@ -301,10 +282,23 @@ void loop() {
       currentPage = CALIBRATION_IN_PROGRESS;
       drawCalibrationInProgressPage();
       delay(500);
-      calibrateMotorsOnStartup();
-      calibrationComplete = true;
-      currentPage = WELCOME;
-      drawWelcomePage();
+      pendingMove.target1_phase1 = 0;
+      pendingMove.target2_phase1 = 0;
+      pendingMove.speed1_phase1 = 1.0;
+      pendingMove.speed2_phase1 = 1.0;
+
+      pendingMove.target1_phase2 = LOAD_POSITION;
+      pendingMove.target2_phase2 = LOAD_POSITION;
+      pendingMove.speed1_phase2 = 2.0;
+      pendingMove.speed2_phase2 = 2.0;
+    
+      pendingMove.phaseCount = 2;
+      pendingMove.phaseIndex = 0;
+      pendingMove.phaseStarted = false;
+      pendingMove.onProgress = drawCalibrationInProgressPage;
+      pendingMove.onArrived = onCalibrationArrived;
+      pendingMove.onFailed = goToErrorPage;
+      pendingMove.active = true;
     }
     delay(50);
     return;
@@ -314,18 +308,27 @@ void loop() {
   
   if (pendingMove.active) {
     if (!pendingMove.phaseStarted) {
-      startMotorMove(pendingMove.moveState, pendingTargetPos1, pendingTargetPos2, 2.0, 2.0);
+      if (pendingMove.phaseIndex == 0){
+        startMotorMove(pendingMove.moveState, pendingMove.target1_phase1, pendingMove.target2_phase1, pendingMove.speed1_phase1, pendingMove.speed2_phase1);
+      } else {
+        startMotorMove(pendingMove.moveState, pendingMove.target1_phase2, pendingMove.target2_phase2, pendingMove.speed1_phase2, pendingMove.speed2_phase2);
+      }
       pendingMove.phaseStarted = true;
     }
 
-    drawHomingPage();
+    pendingMove.onProgress();
     MotorMoveStatus status = pollMotorMove(pendingMove.moveState);
 
     if (status == ARRIVED) {
-      pendingMove.active = false;
       arduino_pos1 = pendingMove.moveState.target1;
       arduino_pos2 = pendingMove.moveState.target2;
-      pendingMove.onArrived();
+      if (pendingMove.phaseIndex +1 < pendingMove.phaseCount){
+        pendingMove.phaseIndex += 1;
+        pendingMove.phaseStarted = false;
+      } else {
+        pendingMove.active = false;
+        pendingMove.onArrived();
+      }
     } else if (status == FAILED) {
       pendingMove.active = false;
       emergencyHalt();
