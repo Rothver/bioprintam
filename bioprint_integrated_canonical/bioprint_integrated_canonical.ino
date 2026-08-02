@@ -89,8 +89,6 @@ enum {PHASE_NONE, PHASE_ONE, PHASE_TWO} extrusionPhase = PHASE_NONE;
 long arduino_pos1 = 0;
 long arduino_pos2 = 0;
 bool motorsHomed = false;
-long pendingTargetPos1 = 0;
-long pendingTargetPos2 = 0;
 
 PendingMove pendingMove;
 
@@ -176,21 +174,6 @@ void getCurrentPageInfo(const char** title, const char** unit) {
   }
 }
 
-// Move both motors to LOAD_POSITION (15000 steps — fully retracted for syringe loading).
-// Returns true on success, false if movement fails.
-bool homeMotors() {
-  Serial.println("homeMotors(): moving to LOAD_POSITION (15000)");
-  bool ok = moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 2.0);
-  if (ok) {
-    arduino_pos1 = LOAD_POSITION;
-    arduino_pos2 = LOAD_POSITION;
-    motorsHomed  = true;
-    Serial.println("homeMotors(): complete");
-  } else {
-    Serial.println("homeMotors(): FAILED");
-  }
-  return ok;
-}
 
 // ==================== SETUP ====================
 void setup() {
@@ -295,10 +278,11 @@ void loop() {
       pendingMove.phaseCount = 2;
       pendingMove.phaseIndex = 0;
       pendingMove.phaseStarted = false;
+      pendingMove.active = true;
       pendingMove.onProgress = drawCalibrationInProgressPage;
       pendingMove.onArrived = onCalibrationArrived;
       pendingMove.onFailed = goToErrorPage;
-      pendingMove.active = true;
+      pendingMove.failureMessage = "Calibration failed: motors could not confirm position";
     }
     delay(50);
     return;

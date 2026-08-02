@@ -1304,7 +1304,7 @@ void goToPrintConfirmPage() {
 
 //Used when motor movement fails
 void goToErrorPage(){
-  drawErrorPage("Motor move failed");
+  drawErrorPage(pendingMove.failureMessage.c_str());
   currentPage = ERROR_PAGE;
 }
 
@@ -1313,6 +1313,12 @@ void onCalibrationArrived() {
   calibrationComplete = true;
   currentPage = WELCOME;
   drawWelcomePage();
+}
+
+void waitingForSyringes() {
+  motorsHomed = true;
+  currentPage = WAITING_FOR_SYRINGES;
+  drawWaitingForSyringesPage();
 }
 
 // ==================== TOUCH HANDLERS ====================
@@ -1338,10 +1344,11 @@ void handleMotorZeroCheckTouch(int x, int y) {
     pendingMove.phaseCount = 2;
     pendingMove.phaseIndex = 0;
     pendingMove.phaseStarted = false;
+    pendingMove.active = true;
     pendingMove.onProgress = drawCalibrationInProgressPage;
     pendingMove.onArrived = onCalibrationArrived;
     pendingMove.onFailed = goToErrorPage;
-    pendingMove.active = true;
+    pendingMove.failureMessage = "Calibration failed: motors could not confirm position";
 
     return;
   }
@@ -1849,25 +1856,23 @@ void handleErrorTouch(int x, int y) {
 }
 
 void handleLoadingSyringesTouch(int x, int y) {
-  if (x >= 90 && x <= 390 && y >= 580 && y <= 660) {
-    currentPage = HOMING_PAGE;
+  if (x >= 90 && x <= 390 && y >= 580 && y <= 660) {    
+    pendingMove.target1_phase1 = LOAD_POSITION;
+    pendingMove.target2_phase1 = LOAD_POSITION;
+    pendingMove.speed1_phase1 = 2.0;
+    pendingMove.speed2_phase1 = 2.0;
+
+    pendingMove.phaseCount = 1;
+    pendingMove.phaseIndex = 0;
+    pendingMove.phaseStarted = false;
+    pendingMove.active = true;
+    pendingMove.onArrived = waitingForSyringes; 
+    pendingMove.onFailed = goToErrorPage;
     pendingMove.onProgress = drawHomingPage;
+    pendingMove.failureMessage = "Failed to reach loading position";
+    
     pendingMove.onProgress();
-    
-    // Small delay to show the homing page
-    delay(100);
-    
-    // Attempt to home motors to LOAD_POSITION (15000)
-    if (!homeMotors()) {
-      drawErrorPage("Failed to reach loading position!");
-      currentPage = ERROR_PAGE;
-      return;
-    }
-    
-    // Success - motors are now at LOAD_POSITION (15000)
-    currentPage = WAITING_FOR_SYRINGES;
-    drawWaitingForSyringesPage();
-    
+    currentPage = HOMING_PAGE; 
     return;
   }
   
@@ -1889,18 +1894,22 @@ void handleWaitingForSyringesTouch(int x, int y) {
     long target1 = 1600 + mlToSteps(selectedVol1);
     long target2 = 1600 + mlToSteps(selectedVol2);
     
-    pendingTargetPos1 = target1;
-    pendingTargetPos2 = target2;
+    pendingMove.target1_phase1 = target1;
+    pendingMove.target2_phase1 = target2;
+    pendingMove.speed1_phase1 = 2.0;
+    pendingMove.speed2_phase1 = 2.0;
 
+    pendingMove.phaseCount = 1;
+    pendingMove.phaseIndex = 0;
+    pendingMove.phaseStarted = false;
+    pendingMove.active = true;
     pendingMove.onArrived = goToPrintConfirmPage;
     pendingMove.onFailed = goToErrorPage;
     pendingMove.onProgress = drawHomingPage;
-    pendingMove.phaseStarted = false;
-    pendingMove.active = true;
-
-    currentPage = HOMING_PAGE;
-    pendingMove.onProgress();
+    pendingMove.failureMessage = "Failed to reach volume position";
     
+    pendingMove.onProgress();
+    currentPage = HOMING_PAGE;
     return;    
   }
   

@@ -113,6 +113,7 @@ struct PendingMove {
   float speed1_phase2, speed2_phase2;
   void (*onArrived)();
   void (*onFailed)();
+  String failureMessage;
   void (*onProgress)();
 };
 
