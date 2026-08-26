@@ -1315,6 +1315,12 @@ void onCalibrationArrived() {
   drawWelcomePage();
 }
 
+void onReturnToLoading(){
+  motorsHomed = true;
+  currentPage = MOTOR_ZERO_CHECK;
+  drawMotorZeroCheckPage();
+}
+
 void waitingForSyringes() {
   motorsHomed = true;
   currentPage = WAITING_FOR_SYRINGES;
@@ -1717,22 +1723,23 @@ void handlePostExtrusionOptionsTouch(int x, int y) {
   if (x >= 320 && x <= 440 && y >= 450 && y <= 520) {
     Serial.println("FINISH pressed - returning motors to load position");
     // Move motors to 15000 (LOAD_POSITION)
-    if (moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 3.0)) {
-      arduino_pos1 = LOAD_POSITION;
-      arduino_pos2 = LOAD_POSITION;
-      Serial.println("Motors at LOAD_POSITION - returning to start");
+      pendingMove.target1_phase1 = LOAD_POSITION;
+      pendingMove.target2_phase1 = LOAD_POSITION;
+      pendingMove.speed1_phase1 = 3.0;
+      pendingMove.speed2_phase1 = 3.0;
+    
+      pendingMove.phaseCount = 1;
+      pendingMove.phaseIndex = 0;
+      pendingMove.phaseStarted = false;
+      pendingMove.active = true;
+      pendingMove.onProgress = drawCalibrationInProgressPage;
+      pendingMove.onArrived = onReturnToLoading;
+      pendingMove.onFailed = goToErrorPage;
+      pendingMove.failureMessage = "Failed to return to load position";
       
       // Turn off heat
       heatControlEnabled = false;
       analogWrite(MOSFET_PIN, 0);
-      
-      // Return to initial screen
-      currentPage = MOTOR_ZERO_CHECK;
-      drawMotorZeroCheckPage();
-    } else {
-      drawErrorPage("Failed to return to load position");
-      currentPage = ERROR_PAGE;
-    }
     return;
   }
   
@@ -1809,22 +1816,23 @@ void handlePrintDoneTouch(int x, int y) {
   if (x >= 40 && x <= 220 && y >= 550 && y <= 630) {
     Serial.println("FINISH pressed from PRINT_DONE - returning to start");
     // Move motors to LOAD_POSITION
-    if (moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 3.0)) {
-      arduino_pos1 = LOAD_POSITION;
-      arduino_pos2 = LOAD_POSITION;
-      Serial.println("Motors at LOAD_POSITION - returning to start");
+      pendingMove.target1_phase1 = LOAD_POSITION;
+      pendingMove.target2_phase1 = LOAD_POSITION;
+      pendingMove.speed1_phase1 = 3.0;
+      pendingMove.speed2_phase1 = 3.0;
+    
+      pendingMove.phaseCount = 1;
+      pendingMove.phaseIndex = 0;
+      pendingMove.phaseStarted = false;
+      pendingMove.active = true;
+      pendingMove.onProgress = drawCalibrationInProgressPage;
+      pendingMove.onArrived = onReturnToLoading;
+      pendingMove.onFailed = goToErrorPage;
+      pendingMove.failureMessage = "Failed to return to load position";
       
       // Turn off heat
       heatControlEnabled = false;
       analogWrite(MOSFET_PIN, 0);
-      
-      // Return to initial screen
-      currentPage = MOTOR_ZERO_CHECK;
-      drawMotorZeroCheckPage();
-    } else {
-      drawErrorPage("Failed to return to load position");
-      currentPage = ERROR_PAGE;
-    }
     return;
   }
   
