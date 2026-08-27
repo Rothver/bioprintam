@@ -20,7 +20,6 @@ extern bool systemReady;
 extern bool heatControlEnabled;
 extern bool isPrinting;
 extern bool syringesTempReached;
-extern bool shutdownInProgress;
 extern bool calibrationComplete;
 extern unsigned long retractionStartTime;
 extern unsigned long shutdownStartTime;
@@ -1321,6 +1320,11 @@ void onReturnToLoading(){
   drawMotorZeroCheckPage();
 }
 
+void onShutdown(){
+    currentPage = SHUTDOWN_COMPLETE;
+    drawShutdownCompletePage();
+}
+
 void waitingForSyringes() {
   motorsHomed = true;
   currentPage = WAITING_FOR_SYRINGES;
@@ -1386,13 +1390,20 @@ void handleShutdownConfirmTouch(int x, int y) {
     
     // Go to shutting down page
     currentPage = SHUTTING_DOWN;
-    shutdownInProgress = true;
-    shutdownStartTime = millis();
-    drawShuttingDownPage();
+
+    pendingMove.target1_phase1 = 0;
+    pendingMove.target2_phase1 = 0;
+    pendingMove.speed1_phase1 = 0.5;
+    pendingMove.speed2_phase1 = 0.5;
     
-    Serial.println("Starting motor retraction to zero...");
-    // Start movement to zero
-    moveMotorsTo(0, 0, 0.5);  // Slow retraction
+    pendingMove.phaseCount = 1;
+    pendingMove.phaseIndex = 0;
+    pendingMove.phaseStarted = false;
+    pendingMove.active = true;
+    pendingMove.onProgress = drawShuttingDownPage;
+    pendingMove.onArrived = onShutdown;
+    pendingMove.onFailed = goToErrorPage;
+    pendingMove.failureMessage = "Shutdown failed: motors could not confirm position";
     return;
   }
   
