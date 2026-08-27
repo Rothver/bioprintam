@@ -58,6 +58,7 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
 void getCurrentPageInfo(const char** title, const char** unit);
 
 void drawMotorZeroCheckPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -96,9 +97,11 @@ void drawMotorZeroCheckPage() {
   display.print("If NO: Motors will retract");
   display.setCursor(50, 680);
   display.print("slowly for 15 seconds");
+  display.endBuffering();
 }
 
 void drawRetractingToZeroPage() {
+  display.startBuffering();
   unsigned long elapsed = millis() - retractionStartTime;
   unsigned long remaining = RETRACTION_DURATION - elapsed;
   float progress = (float)elapsed / (float)RETRACTION_DURATION * 100.0;
@@ -141,9 +144,11 @@ void drawRetractingToZeroPage() {
   display.print("Slow speed: 0.5 mm/s");
   display.setCursor(50, 660);
   display.print("Safe retraction in progress");
+  display.endBuffering();
 }
 
 void drawCalibrationInProgressPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -174,9 +179,11 @@ void drawCalibrationInProgressPage() {
   display.print(arduino_pos1);
   display.print("  M2: ");
   display.print(arduino_pos2);
+  display.endBuffering();
 }
 
 void drawShutdownConfirmPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(CANCEL_COLOR);
@@ -210,9 +217,11 @@ void drawShutdownConfirmPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(330, 585);
   display.print("NO");
+  display.endBuffering();
 }
 
 void drawShuttingDownPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -245,9 +254,11 @@ void drawShuttingDownPage() {
   
   display.setCursor(60, 650);
   display.print("Please wait - do not power off");
+  display.endBuffering();
 }
 
 void drawShutdownCompletePage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(CONFIRM_COLOR);
@@ -274,9 +285,11 @@ void drawShutdownCompletePage() {
   display.setFont(&FreeSans9pt7b);
   display.setCursor(80, 600);
   display.print("You may now disconnect power");
+  display.endBuffering();
 }
 
 void drawWelcomePage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -320,9 +333,11 @@ void drawWelcomePage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(185, 690);
   display.print("START");
+  display.endBuffering();
 }
 
 void drawHomingPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -366,9 +381,11 @@ void drawHomingPage() {
   display.print("M2: ");
   display.print(arduino_pos2);
   display.print(" steps");
+  display.endBuffering();
 }
 
 void drawLoadingSyringesPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -426,9 +443,11 @@ void drawLoadingSyringesPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(345, 745);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawWaitingForSyringesPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -489,9 +508,11 @@ void drawWaitingForSyringesPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(205, 748);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawHomePage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setTextColor(TEXT_COLOR);
   display.setFont(&FreeSansBold12pt7b);
@@ -515,6 +536,7 @@ void drawHomePage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(270, 650);
   display.print("SHUTDOWN");
+  display.endBuffering();
 }
 
 void drawHomeButton(int x, int y, const char* label, float value, const char* unit) {
@@ -550,6 +572,7 @@ void drawHomeButton(int x, int y, const char* label, float value, const char* un
 }
 
 void drawParameterPage(int* options, int numOptions, float currentValue, const char* title, const char* unit) {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setTextColor(TEXT_COLOR);
   display.setFont(&FreeSansBold12pt7b);
@@ -660,9 +683,11 @@ void drawParameterPage(int* options, int numOptions, float currentValue, const c
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(330, 745);
   display.print("CONFIRM");
+  display.endBuffering();
 }
 
 void drawPrintConfirmPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setTextColor(TEXT_COLOR);
   display.setFont(&FreeSansBold18pt7b);
@@ -702,6 +727,7 @@ void drawPrintConfirmPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(345, 753);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawParameterSummary(int x, int y, const char* label, float value, const char* unit) {
@@ -733,6 +759,7 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
 }
 
 void drawLoadingPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -803,9 +830,11 @@ void drawLoadingPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(185, 730);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawTempReadyPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -896,9 +925,11 @@ void drawTempReadyPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(190, 740);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawExtrusionSetupPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -993,9 +1024,11 @@ void drawExtrusionSetupPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(190, 740);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawPostExtrusionOptionsPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -1051,9 +1084,11 @@ void drawPostExtrusionOptionsPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(190, 645);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawReadyToPrintPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -1101,9 +1136,11 @@ void drawReadyToPrintPage() {
   display.fillRoundRect(140, 670, 200, 70, 10, CANCEL_COLOR);
   display.setCursor(190, 715);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawPrintingPage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
@@ -1179,9 +1216,11 @@ void drawPrintingPage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(165, 650);
   display.print("STOP");
+  display.endBuffering();
 }
 
 void drawPrintDonePage() {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(CONFIRM_COLOR);
@@ -1220,9 +1259,11 @@ void drawPrintDonePage() {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(310, 605);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawErrorPage(const char* message) {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(CANCEL_COLOR);
@@ -1238,9 +1279,11 @@ void drawErrorPage(const char* message) {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(205, 495);
   display.print("HOME");
+  display.endBuffering();
 }
 
 void drawValidationErrorPage(String error_msg, String suggestions) {
+  display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(CANCEL_COLOR);
@@ -1294,6 +1337,7 @@ void drawValidationErrorPage(String error_msg, String suggestions) {
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(180, 725);
   display.print("BACK");
+  display.endBuffering();
 }
 
 void goToPrintConfirmPage() {
