@@ -102,6 +102,21 @@ struct MotorMoveState {
   int consecutive_arrivals;
 };
 
+struct PendingMove {
+  MotorMoveState moveState;
+  bool active = false;
+  bool phaseStarted = false;
+  uint8_t phaseCount, phaseIndex;
+  long target1_phase1, target2_phase1;
+  long target1_phase2, target2_phase2;
+  float speed1_phase1, speed2_phase1;
+  float speed1_phase2, speed2_phase2;
+  void (*onArrived)();
+  void (*onFailed)();
+  String failureMessage;
+  void (*onProgress)();
+};
+
 // ==================== MOTOR INITIALIZATION ====================
 
 /*
@@ -269,15 +284,15 @@ inline bool waitForArrival(long target1, long target2) {
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
 
 
-inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms) {
+inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms1, float speed_mms2) {
   syncPositionToTIC();
   tic1.clearDriverError();
   tic2.clearDriverError();
   tic1.exitSafeStart();
   tic2.exitSafeStart();
-  long speed_steps = mmsToStepsPerSec(speed_mms);
-  tic1.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
-  tic2.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
+
+  tic1.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms1)));
+  tic2.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms2)));
   tic1.setTargetPosition(target1);
   tic2.setTargetPosition(target2);
 

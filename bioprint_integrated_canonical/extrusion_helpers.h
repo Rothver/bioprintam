@@ -23,6 +23,7 @@ extern bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, fl
 extern long arduino_pos1;
 extern long arduino_pos2;
 extern SystemState current_state;
+extern ExtrusionPlan extrusionPlan;
 
 // Motor constants (MM_PER_ML, MM_PER_STEP, STEPS_PER_ML, LOAD_POSITION) come from config.h
 
@@ -261,7 +262,7 @@ ExtrusionValidation validateExtrusion(SystemConfig &config, float total_volume_m
  * 
  * Sets current_state to EXTRUDING during execution, COMPLETE on success, SAFE_MODE on error
  */
-bool executeExtrude(SystemConfig &config, float total_volume_ml, float print_time_sec) {
+ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float print_time_sec) {
   current_state = EXTRUDING;
   
   Serial.println("\n=== EXTRUSION START ===");
@@ -273,44 +274,48 @@ bool executeExtrude(SystemConfig &config, float total_volume_ml, float print_tim
   
   // Calculate volumes based on ratio
   // CRITICAL: Requested volume = TOTAL OUTPUT, distributed by ratio
-  float vol1_to_dispense = total_volume_ml * config.ratio1;
-  float vol2_to_dispense = total_volume_ml * config.ratio2;
+  extrusionPlan.vol1_to_dispense = total_volume_ml * config.ratio1;
+  extrusionPlan.vol2_to_dispense = total_volume_ml * config.ratio2;
   
   Serial.print("Ratio: M1=");
   Serial.print(config.ratio1 * 100, 0);
   Serial.print("% (");
-  Serial.print(vol1_to_dispense, 3);
+  Serial.print(extrusionPlan.vol1_to_dispense, 3);
   Serial.print("mL), M2=");
   Serial.print(config.ratio2 * 100, 0);
   Serial.print("% (");
-  Serial.print(vol2_to_dispense, 3);
+  Serial.print(extrusionPlan.vol2_to_dispense, 3);
   Serial.println("mL)");
   
   // SAFETY CHECK: Ensure sufficient volume in each syringe
-  if (vol1_to_dispense > config.remaining1) {
+  if (extrusionPlan.vol1_to_dispense > config.remaining1) {
     Serial.print("ERROR: M1 requires ");
-    Serial.print(vol1_to_dispense, 2);
+    Serial.print(extrusionPlan.vol1_to_dispense, 2);
     Serial.print("mL but only ");
     Serial.print(config.remaining1, 2);
     Serial.println("mL remaining!");
     current_state = COMPLETE;
-    return false;
+
+    extrusionPlan.ok = false;
+    return extrusionPlan;
   }
   
-  if (vol2_to_dispense > config.remaining2) {
+  if (extrusionPlan.vol2_to_dispense > config.remaining2) {
     Serial.print("ERROR: M2 requires ");
-    Serial.print(vol2_to_dispense, 2);
+    Serial.print(extrusionPlan.vol2_to_dispense, 2);
     Serial.print("mL but only ");
     Serial.print(config.remaining2, 2);
     Serial.println("mL remaining!");
     current_state = COMPLETE;
-    return false;
+
+    extrusionPlan.ok = false;
+    return extrusionPlan;
   }
   
   // Calculate speeds to finish at same time
   // speed = distance / time
-  float dist1_mm = vol1_to_dispense * MM_PER_ML;
-  float dist2_mm = vol2_to_dispense * MM_PER_ML;
+  float dist1_mm = extrusionPlan.vol1_to_dispense * MM_PER_ML;
+  float dist2_mm = extrusionPlan.vol2_to_dispense * MM_PER_ML;
   
   float speed1_mms = dist1_mm / print_time_sec;
   float speed2_mms = dist2_mm / print_time_sec;
@@ -337,14 +342,14 @@ bool executeExtrude(SystemConfig &config, float total_volume_ml, float print_tim
   bool motor2_needs_boost = (speed2_mms < SLOW_SPEED_THRESHOLD && print_time_sec > BOOST_DURATION);
   
   // If EITHER motor needs boost, BOTH motors do two-phase movement
-  bool use_two_phase = (motor1_needs_boost || motor2_needs_boost) && (print_time_sec > BOOST_DURATION);
+  extrusionPlan.use_two_phase = (motor1_needs_boost || motor2_needs_boost) && (print_time_sec > BOOST_DURATION);
   
   float phase1_speed_m1, phase2_speed_m1;
   float phase1_speed_m2, phase2_speed_m2;
   long phase1_steps_m1, phase2_steps_m1;
   long phase1_steps_m2, phase2_steps_m2;
   
-  if (use_two_phase) {
+  if (extrusionPlan.use_two_phase) {
     Serial.println("=== TWO-PHASE MOVEMENT ===");
     
     // BOTH motors execute Phase 1 and Phase 2 together
@@ -437,14 +442,28 @@ bool executeExtrude(SystemConfig &config, float total_volume_ml, float print_tim
       Serial.print(phase2_dist_m2, 2);
       Serial.println("mm)");
     }
+    extrusionPlan.phase1_target1 = arduino_pos1 - phase1_steps_m1;
+    extrusionPlan.phase1_target2 = arduino_pos2 - phase1_steps_m2;
+
+    extrusionPlan.phase1_speed_m1 = phase1_speed_m1;
+    extrusionPlan.phase1_speed_m2 = phase1_speed_m2;
+    extrusionPlan.phase2_speed_m1 = phase2_speed_m1;
+    extrusionPlan.phase2_speed_m2 = phase2_speed_m2;
+  } else {
+    extrusionPlan.use_two_phase = false;
+    extrusionPlan.phase2_speed_m1 = speed1_mms;
+    extrusionPlan.phase2_speed_m2 = speed2_mms;
   }
   
   // Calculate target positions (extrusion moves DOWN toward 1600)
-  long steps1 = (long)(vol1_to_dispense * STEPS_PER_ML);
-  long steps2 = (long)(vol2_to_dispense * STEPS_PER_ML);
+  long steps1 = (long)(extrusionPlan.vol1_to_dispense * STEPS_PER_ML);
+  long steps2 = (long)(extrusionPlan.vol2_to_dispense * STEPS_PER_ML);
   
   long target1 = arduino_pos1 - steps1;
   long target2 = arduino_pos2 - steps2;
+
+  extrusionPlan.phase2_target1 = target1;
+  extrusionPlan.phase2_target2 = target2;
   
   Serial.print("Current positions: M1=");
   Serial.print(arduino_pos1);
@@ -465,125 +484,10 @@ bool executeExtrude(SystemConfig &config, float total_volume_ml, float print_tim
   if (target1 < 1600 || target2 < 1600) {
     Serial.println("ERROR: Would go below 0mL (position 1600)!");
     current_state = COMPLETE;
-    return false;
+    extrusionPlan.ok = false;
+    return extrusionPlan;
   }
-  
-  // Execute movement with acceleration ramp if needed
-  Serial.println("Starting synchronized movement...");
-  
-  if (use_two_phase) {
-    // TWO-PHASE MOVEMENT - BOTH motors execute phases simultaneously
-    Serial.println("=== EXECUTING SYNCHRONIZED TWO-PHASE MOVEMENT ===");
-    
-    // PHASE 1: Both motors move for exactly BOOST_DURATION
-    long phase1_target_m1 = arduino_pos1 - phase1_steps_m1;
-    long phase1_target_m2 = arduino_pos2 - phase1_steps_m2;
-    
-    Serial.print("Phase 1: ");
-    Serial.print(BOOST_DURATION, 1);
-    Serial.println(" seconds");
-    Serial.print("  M1: ");
-    Serial.print(arduino_pos1);
-    Serial.print(" → ");
-    Serial.print(phase1_target_m1);
-    Serial.print(" @ ");
-    Serial.print(phase1_speed_m1, 3);
-    Serial.println(" mm/s");
-    Serial.print("  M2: ");
-    Serial.print(arduino_pos2);
-    Serial.print(" → ");
-    Serial.print(phase1_target_m2);
-    Serial.print(" @ ");
-    Serial.print(phase1_speed_m2, 3);
-    Serial.println(" mm/s");
-    
-    // Execute Phase 1 with time sync
-    if (!moveMotorsTimedSync(phase1_target_m1, phase1_target_m2, phase1_speed_m1, phase1_speed_m2, BOOST_DURATION)) {
-      Serial.println("ERROR: Phase 1 failed!");
-      current_state = SAFE_MODE;
-      return false;
-    }
-    
-    Serial.println("Phase 1 complete - both motors synchronized");
-    
-    // PHASE 2: Both motors move for exactly remaining time
-    long phase2_target_m1 = target1;  // Final target
-    long phase2_target_m2 = target2;  // Final target
-    
-    float remaining_time = print_time_sec - BOOST_DURATION;
-    
-    Serial.print("Phase 2: ");
-    Serial.print(remaining_time, 1);
-    Serial.println(" seconds");
-    Serial.print("  M1: ");
-    Serial.print(arduino_pos1);
-    Serial.print(" → ");
-    Serial.print(phase2_target_m1);
-    Serial.print(" @ ");
-    Serial.print(phase2_speed_m1, 3);
-    Serial.println(" mm/s");
-    Serial.print("  M2: ");
-    Serial.print(arduino_pos2);
-    Serial.print(" → ");
-    Serial.print(phase2_target_m2);
-    Serial.print(" @ ");
-    Serial.print(phase2_speed_m2, 3);
-    Serial.println(" mm/s");
-    
-    // Execute Phase 2 with time sync
-    if (!moveMotorsTimedSync(phase2_target_m1, phase2_target_m2, phase2_speed_m1, phase2_speed_m2, remaining_time)) {
-      Serial.println("ERROR: Phase 2 failed!");
-      current_state = SAFE_MODE;
-      return false;
-    }
-    
-    Serial.println("Phase 2 complete - BOTH MOTORS FINISHED SIMULTANEOUSLY");
-    
-  } else {
-    // SINGLE-PHASE MOVEMENT (no boost needed)
-    Serial.println("=== EXECUTING SINGLE-PHASE MOVEMENT ===");
-    
-    Serial.print("Duration: ");
-    Serial.print(print_time_sec, 1);
-    Serial.println(" seconds");
-    Serial.print("  M1 speed: ");
-    Serial.print(speed1_mms, 3);
-    Serial.println(" mm/s");
-    Serial.print("  M2 speed: ");
-    Serial.print(speed2_mms, 3);
-    Serial.println(" mm/s");
-    
-    // Execute with time sync
-    if (!moveMotorsTimedSync(target1, target2, speed1_mms, speed2_mms, print_time_sec)) {
-      Serial.println("ERROR: Movement failed!");
-      current_state = SAFE_MODE;
-      return false;
-    }
-    
-    Serial.println("Movement complete - both motors synchronized");
-  }
-  
-  // Update tracking
-  config.dispensed1 += vol1_to_dispense;
-  config.dispensed2 += vol2_to_dispense;
-  config.remaining1 -= vol1_to_dispense;
-  config.remaining2 -= vol2_to_dispense;
-  
-  Serial.println("=== EXTRUSION COMPLETE ===");
-  Serial.print("Total dispensed: M1=");
-  Serial.print(config.dispensed1, 2);
-  Serial.print("mL, M2=");
-  Serial.print(config.dispensed2, 2);
-  Serial.println("mL");
-  
-  Serial.print("Remaining: M1=");
-  Serial.print(config.remaining1, 2);
-  Serial.print("mL, M2=");
-  Serial.print(config.remaining2, 2);
-  Serial.println("mL\n");
-  
-  current_state = COMPLETE;
-  return true;
+  extrusionPlan.ok = true;
+  return extrusionPlan;
 }
-
 #endif // EXTRUSION_HELPERS_H

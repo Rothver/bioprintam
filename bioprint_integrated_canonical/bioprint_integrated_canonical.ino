@@ -78,17 +78,19 @@ TicI2C tic2;
 // All state and page enums moved to libraries/state_machine.h
 SystemState current_state = UNINITIALIZED;
 Page currentPage = WELCOME;
+ExtrusionPlan extrusionPlan;
 
 // System state tracking (temperature stabilization is now in pid_controller.h)
 bool systemReady = false;
 unsigned long tempStableTime = 0;
+enum {PHASE_NONE, PHASE_ONE, PHASE_TWO} extrusionPhase = PHASE_NONE;  
 
 // ==================== POSITION TRACKING ====================
 long arduino_pos1 = 0;
 long arduino_pos2 = 0;
 bool motorsHomed = false;
-long pendingTargetPos1 = 0;
-long pendingTargetPos2 = 0;
+
+PendingMove pendingMove;
 
 // ==================== UI PARAMETER STORAGE ====================
 float selectedTemp = -1;
@@ -172,40 +174,6 @@ void getCurrentPageInfo(const char** title, const char** unit) {
   }
 }
 
-// Move both motors to LOAD_POSITION (15000 steps — fully retracted for syringe loading).
-// Returns true on success, false if movement fails.
-bool homeMotors() {
-  Serial.println("homeMotors(): moving to LOAD_POSITION (15000)");
-  bool ok = moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 2.0);
-  if (ok) {
-    arduino_pos1 = LOAD_POSITION;
-    arduino_pos2 = LOAD_POSITION;
-    motorsHomed  = true;
-    Serial.println("homeMotors(): complete");
-  } else {
-    Serial.println("homeMotors(): FAILED");
-  }
-  return ok;
-}
-
-// Establish the full 0–15000 step range on startup.
-// Moves to position 0 (minimum) then to LOAD_POSITION to confirm the
-// controller's coordinate system matches the physical hardware.
-void calibrateMotorsOnStartup() {
-  Serial.println("calibrateMotorsOnStartup(): moving to 0");
-  moveMotorsTo(0, 0, 1.0);
-
-  delay(500);
-
-  Serial.println("calibrateMotorsOnStartup(): moving to LOAD_POSITION (15000)");
-  moveMotorsTo(LOAD_POSITION, LOAD_POSITION, 2.0);
-
-  arduino_pos1 = LOAD_POSITION;
-  arduino_pos2 = LOAD_POSITION;
-  motorsHomed  = true;
-
-  Serial.println("calibrateMotorsOnStartup(): complete");
-}
 
 // ==================== SETUP ====================
 void setup() {
@@ -297,38 +265,58 @@ void loop() {
       currentPage = CALIBRATION_IN_PROGRESS;
       drawCalibrationInProgressPage();
       delay(500);
-      calibrateMotorsOnStartup();
-      calibrationComplete = true;
-      currentPage = WELCOME;
-      drawWelcomePage();
+      pendingMove.target1_phase1 = 0;
+      pendingMove.target2_phase1 = 0;
+      pendingMove.speed1_phase1 = 1.0;
+      pendingMove.speed2_phase1 = 1.0;
+
+      pendingMove.target1_phase2 = LOAD_POSITION;
+      pendingMove.target2_phase2 = LOAD_POSITION;
+      pendingMove.speed1_phase2 = 2.0;
+      pendingMove.speed2_phase2 = 2.0;
+    
+      pendingMove.phaseCount = 2;
+      pendingMove.phaseIndex = 0;
+      pendingMove.phaseStarted = false;
+      pendingMove.active = true;
+      pendingMove.onProgress = drawCalibrationInProgressPage;
+      pendingMove.onArrived = onCalibrationArrived;
+      pendingMove.onFailed = goToErrorPage;
+      pendingMove.failureMessage = "Calibration failed: motors could not confirm position";
     }
     delay(50);
     return;
   }
   retractionStarted = false;
 
-  static MotorMoveState volumnMoveState;
-  static bool volumeMoveStarted = false;
-  if (currentPage == HOMING_PAGE) {
-    if (!volumeMoveStarted) {
-      startMotorMove(volumnMoveState, pendingTargetPos1, pendingTargetPos2, 2.0);
-      volumeMoveStarted = true;
+  
+  if (pendingMove.active) {
+    if (!pendingMove.phaseStarted) {
+      if (pendingMove.phaseIndex == 0){
+        startMotorMove(pendingMove.moveState, pendingMove.target1_phase1, pendingMove.target2_phase1, pendingMove.speed1_phase1, pendingMove.speed2_phase1);
+      } else {
+        startMotorMove(pendingMove.moveState, pendingMove.target1_phase2, pendingMove.target2_phase2, pendingMove.speed1_phase2, pendingMove.speed2_phase2);
+      }
+      pendingMove.phaseStarted = true;
     }
 
-    drawHomingPage();
-    MotorMoveStatus status = pollMotorMove(volumnMoveState);
+    pendingMove.onProgress();
+    MotorMoveStatus status = pollMotorMove(pendingMove.moveState);
 
     if (status == ARRIVED) {
-      volumeMoveStarted = false;
-      arduino_pos1 = volumnMoveState.target1;
-      arduino_pos2 = volumnMoveState.target2;
-      currentPage = PRINT_CONFIRM;
-      drawPrintConfirmPage();
+      arduino_pos1 = pendingMove.moveState.target1;
+      arduino_pos2 = pendingMove.moveState.target2;
+      if (pendingMove.phaseIndex +1 < pendingMove.phaseCount){
+        pendingMove.phaseIndex += 1;
+        pendingMove.phaseStarted = false;
+      } else {
+        pendingMove.active = false;
+        pendingMove.onArrived();
+      }
     } else if (status == FAILED) {
-      volumeMoveStarted = false;
+      pendingMove.active = false;
       emergencyHalt();
-      drawErrorPage("Motor move failed");
-      currentPage = ERROR_PAGE;
+      pendingMove.onFailed();
     }
 
     delay(50);
@@ -336,21 +324,62 @@ void loop() {
     return;
   }
 
-  // ---- 3. Extrusion execution (blocking while printing) ----
+  static MotorMoveState extrusionMoveState;
+  // ---- 3. Extrusion execution ----
   // isPrinting is set by handleReadyToPrintTouch when PRINT is pressed.
   if (isPrinting && currentPage == PRINTING_PAGE) {
-    bool ok = executeExtrude(config, extrusionVolume, printTime);
-    isPrinting = false;
-    if (ok) {
-      current_state = COMPLETE;
-      currentPage = POST_EXTRUSION_OPTIONS;
-      drawPostExtrusionOptionsPage();
-    } else {
-      emergencyHalt();
-      drawErrorPage("Extrusion failed");
-      currentPage = ERROR_PAGE;
+    if (extrusionPhase == PHASE_NONE) {
+      extrusionPlan = prepareExtrude(config, extrusionVolume, printTime);
+
+      if (!extrusionPlan.ok) {
+        emergencyHalt();
+        drawErrorPage("Extrusion invalid");
+        currentPage = ERROR_PAGE;
+        isPrinting = false;
+        return;
+      }
+      if (extrusionPlan.use_two_phase) {
+        startMotorMove(extrusionMoveState, extrusionPlan.phase1_target1, extrusionPlan.phase1_target2,
+                       extrusionPlan.phase1_speed_m1, extrusionPlan.phase1_speed_m2);
+        extrusionPhase = PHASE_ONE;
+      } else {
+        startMotorMove(extrusionMoveState, extrusionPlan.phase2_target1, extrusionPlan.phase2_target2,
+                       extrusionPlan.phase2_speed_m1, extrusionPlan.phase2_speed_m2);
+        extrusionPhase = PHASE_TWO;
+      }
     }
-    return;
+    MotorMoveStatus status = pollMotorMove(extrusionMoveState);
+
+    if (status == ARRIVED) {
+        if (extrusionPhase == PHASE_ONE) {
+          startMotorMove(extrusionMoveState, extrusionPlan.phase2_target1, extrusionPlan.phase2_target2,
+                         extrusionPlan.phase2_speed_m1, extrusionPlan.phase2_speed_m2);
+          extrusionPhase = PHASE_TWO;
+        } else {
+          arduino_pos1 = extrusionMoveState.target1;
+          arduino_pos2 = extrusionMoveState.target2;
+
+          config.dispensed1 += extrusionPlan.vol1_to_dispense;
+        config.dispensed2 += extrusionPlan.vol2_to_dispense;
+        config.remaining1 -= extrusionPlan.vol1_to_dispense;
+        config.remaining2 -= extrusionPlan.vol2_to_dispense;
+
+        current_state = COMPLETE;
+        currentPage = POST_EXTRUSION_OPTIONS;
+        drawPostExtrusionOptionsPage();
+        isPrinting = false;
+        extrusionPhase = PHASE_NONE;
+        }
+      } else if (status == FAILED) {
+        emergencyHalt();
+        drawErrorPage("Extrusion failed");
+        currentPage = ERROR_PAGE;
+        isPrinting = false;
+        extrusionPhase = PHASE_NONE;
+      }
+
+      delay(50); 
+      return;
   }
 
   // ---- 4. Touch input dispatch ----
