@@ -472,6 +472,11 @@ void loop() {
 
   // ---- 5. TEMP_READY: advance to systemReady after stable duration ----
   if (currentPage == TEMP_READY) {
+     static unsigned long lastTempReadyRedraw = 0;
+      if (millis() - lastTempReadyRedraw >= 500){
+        drawTempReadyPage();
+        lastTempReadyRedraw = millis();
+      }
 #ifdef SKIP_TEMP_VALIDATION
     if (!systemReady && current_state == PRIMED) {
       systemReady = true;
