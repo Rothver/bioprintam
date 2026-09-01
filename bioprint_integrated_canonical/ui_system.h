@@ -640,14 +640,15 @@ void drawParameterPage(int* options, int numOptions, float currentValue, const c
     display.setTextColor(BUTTON_TEXT_COLOR);
     
     String valueStr = String(options[i]);
-    int charCount = valueStr.length();
     //Gets the text offset to allow for centering of text in button
     int16_t x1, y1;
     uint16_t w, h;
-    display.getTextBounds(label, 0, 0, &x1, &y1, &w, &h);
-    
-    display.setCursor(x1, y1);
-    display.print(options[i]);
+    display.getTextBounds(valueStr, 0, 0, &x1, &y1, &w, &h);
+
+    int textX = bx + (buttonWidth - w) / 2 - x1;
+    int textY = by + (buttonHeight - h) / 2 - y1;
+    display.setCursor(textX, textY);
+    display.print(valueStr);
   }
   
   drawActionButton(40, 700, 120, 70, 10, CANCEL_COLOR, "BACK", &FreeSansBold12pt7b);
