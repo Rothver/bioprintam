@@ -506,7 +506,6 @@ void drawWaitingForSyringesPage() {
     display.print("M2: 10.0 mL (pos 11600)");
   }
   
-  display.setTextColor(BUTTON_TEXT_COLOR);
   drawActionButton(90, 600, 300, 80, 10, CONFIRM_COLOR, "SYRINGES", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR, "LOADED");
   
   drawActionButton(170, 710, 140, 60, 10, CLEAR_COLOR, "HOME", &FreeSans9pt7b);
@@ -527,16 +526,16 @@ void drawHomePage() {
   drawHomeButton(40, 450, "Concentration", selectedConc, "%");
   
   // CONTINUE button (left)
-  drawActionButton(40, 600, 180, 80, 8, CONFIRM_COLOR, "CONTINUE", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(40, 600, 180, 80, 10, CONFIRM_COLOR, "CONTINUE", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   
   // SHUTDOWN button (right, red)
-  drawActionButton(260, 600, 180, 80, 8, CANCEL_COLOR, "SHUTDOWN", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(260, 600, 180, 80, 10, CANCEL_COLOR, "SHUTDOWN", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   
   display.endBuffering();
 }
 
 void drawHomeButton(int x, int y, const char* label, float value, const char* unit) {
-  display.fillRoundRect(x, y, 400, 90, 8, BUTTON_COLOR);
+  display.fillRoundRect(x, y, 400, 90, 10, BUTTON_COLOR);
   
   display.setFont(&FreeSansBold12pt7b);
   display.setTextColor(BUTTON_TEXT_COLOR);
@@ -584,9 +583,9 @@ void drawParameterPage(int* options, int numOptions, float currentValue, const c
   int buttonSize = 70;
   int buttonSpacing = 10;
   
-  drawActionButton(boxX, boxY, buttonSize, boxHeight, 8, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(boxX, boxY, buttonSize, boxHeight, 10, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
 
-  display.fillRoundRect(boxX + buttonSize + buttonSpacing, boxY, boxWidth, boxHeight, 8, BUTTON_COLOR);
+  display.fillRoundRect(boxX + buttonSize + buttonSpacing, boxY, boxWidth, boxHeight, 10, BUTTON_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(BUTTON_TEXT_COLOR);
   
@@ -595,35 +594,29 @@ void drawParameterPage(int* options, int numOptions, float currentValue, const c
     display.print("Not Set");
   } else {
     String valueStr = "";
-    
+
     if (unit[0] == '%') {
       float inverse = 100 - tempSelection;
       valueStr = String(tempSelection, 0) + ":" + String(inverse, 0) + "%";
-      int charCount = valueStr.length();
-      int textWidth = charCount * 18;
-      int textX = boxX + buttonSize + buttonSpacing + (boxWidth / 2) - (textWidth / 2);
-      display.setCursor(textX, boxY + 62);
-      display.print(valueStr);
     } else if (unit[0] == 'C') {
-      int charCount = String(tempSelection, 1).length() + 2;
-      int textWidth = charCount * 18;
-      int textX = boxX + buttonSize + buttonSpacing + (boxWidth / 2) - (textWidth / 2);
-      display.setCursor(textX, boxY + 62);
-      display.print(tempSelection, 1);
-      display.print(" ");
-      display.write(248);
-      display.print(unit);
+      valueStr = String(tempSelection, 1) + " " + String((char)248) + unit;
     } else {
       valueStr = String(tempSelection, 1) + " " + unit;
-      int charCount = valueStr.length();
-      int textWidth = charCount * 18;
-      int textX = boxX + buttonSize + buttonSpacing + (boxWidth / 2) - (textWidth / 2);
-      display.setCursor(textX, boxY + 62);
-      display.print(valueStr);
     }
+
+    //Gets the text offset to allow for centering of text in button
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(valueStr, 0, 0, &x1, &y1, &w, &h);
+
+    int valueBoxX = boxX + buttonSize + buttonSpacing;
+    int textX = valueBoxX + (boxWidth - w) / 2 - x1;
+    int textY = boxY + (boxHeight - h) / 2 - y1;
+    display.setCursor(textX, textY);
+    display.print(valueStr);
   }
   
-  drawActionButton(boxX + buttonSize + buttonSpacing + boxWidth + buttonSpacing, boxY, buttonSize, boxHeight, 8, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(boxX + buttonSize + buttonSpacing + boxWidth + buttonSpacing, boxY, buttonSize, boxHeight, 10, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   
   int cols = 3;
   int buttonWidth = 120;
@@ -642,23 +635,24 @@ void drawParameterPage(int* options, int numOptions, float currentValue, const c
     bool isSelected = (abs(options[i] - tempSelection) < 0.01);
     uint16_t bgColor = isSelected ? BUTTON_SELECTED_COLOR : BUTTON_COLOR;
     
-    display.fillRoundRect(bx, by, buttonWidth, buttonHeight, 8, bgColor);
+    display.fillRoundRect(bx, by, buttonWidth, buttonHeight, 10, bgColor);
     display.setFont(&FreeSansBold18pt7b);
     display.setTextColor(BUTTON_TEXT_COLOR);
     
     String valueStr = String(options[i]);
     int charCount = valueStr.length();
-    int textWidth = charCount * 20;
-    int textX = bx + (buttonWidth - textWidth) / 2;
-    int textY = by + 52;
+    //Gets the text offset to allow for centering of text in button
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(label, 0, 0, &x1, &y1, &w, &h);
     
-    display.setCursor(textX, textY);
+    display.setCursor(x1, y1);
     display.print(options[i]);
   }
   
-  drawActionButton(40, 700, 120, 70, 8, CANCEL_COLOR, "BACK", &FreeSansBold12pt7b);
-  drawActionButton(180, 700, 120, 70, 8, CLEAR_COLOR, "HOME", &FreeSansBold12pt7b);
-  drawActionButton(320, 700, 120, 70, 8, CONFIRM_COLOR, "CONFIRM", &FreeSansBold12pt7b);
+  drawActionButton(40, 700, 120, 70, 10, CANCEL_COLOR, "BACK", &FreeSansBold12pt7b);
+  drawActionButton(180, 700, 120, 70, 10, CLEAR_COLOR, "HOME", &FreeSansBold12pt7b);
+  drawActionButton(320, 700, 120, 70, 10, CONFIRM_COLOR, "CONFIRM", &FreeSansBold12pt7b);
 
   display.endBuffering();
 }
@@ -688,11 +682,11 @@ void drawPrintConfirmPage() {
   
   drawParameterSummary(40, yPos, "Speed:", selectedSpeed, "mm/s");
   
-  drawActionButton(140, 630, 200, 70, 8, CONFIRM_COLOR, "CONFIRM", &FreeSansBold12pt7b, BUTTON_TEXT_COLOR);
-  
-  drawActionButton(40, 720, 120, 50, 8, CANCEL_COLOR, "BACK", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(140, 630, 200, 70, 10, CONFIRM_COLOR, "CONFIRM", &FreeSansBold12pt7b, BUTTON_TEXT_COLOR);
 
-  drawActionButton(320, 720, 120, 50, 8, CLEAR_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+  drawActionButton(40, 720, 120, 50, 10, CANCEL_COLOR, "BACK", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+
+  drawActionButton(320, 720, 120, 50, 10, CLEAR_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
 
   display.endBuffering();
 }
@@ -881,7 +875,7 @@ void drawTempReadyPage() {
     drawActionButton(90, 600, 300, 80, 10, CONFIRM_COLOR, "YES", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   }
   
-  drawActionButton(140, 700, 200, 60, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR)
+  drawActionButton(140, 700, 200, 60, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
 
   display.endBuffering();
 }
@@ -902,16 +896,16 @@ void drawExtrusionSetupPage() {
   display.setCursor(50, 180);
   display.print("Volume to Extrude:");
   
-  drawActionButton(50, 200, 80, 70, 8, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
-  
-  display.fillRoundRect(150, 200, 180, 70, 8, BUTTON_COLOR);
+  drawActionButton(50, 200, 80, 70, 10, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+
+  display.fillRoundRect(150, 200, 180, 70, 10, BUTTON_COLOR);
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(185, 245);
   display.print(extrusionVolume, 1);
   display.setFont(&FreeSans9pt7b);
   display.print(" mL");
-  
-  drawActionButton(350, 200, 80, 70, 8, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+
+  drawActionButton(350, 200, 80, 70, 10, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   
   // Print Time section
   display.setFont(&FreeSans9pt7b);
@@ -919,16 +913,16 @@ void drawExtrusionSetupPage() {
   display.setCursor(50, 310);
   display.print("Print Time:");
   
-  drawActionButton(50, 330, 80, 70, 8, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
-  
-  display.fillRoundRect(150, 330, 180, 70, 8, BUTTON_COLOR);
+  drawActionButton(50, 330, 80, 70, 10, CONFIRM_COLOR, "-", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+
+  display.fillRoundRect(150, 330, 180, 70, 10, BUTTON_COLOR);
   display.setTextColor(BUTTON_TEXT_COLOR);
   display.setCursor(185, 375);
   display.print((int)printTime);
   display.setFont(&FreeSans9pt7b);
   display.print(" sec");
-  
-  drawActionButton(350, 330, 80, 70, 8, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+
+  drawActionButton(350, 330, 80, 70, 10, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
   
   // Info section
   display.setFont(&FreeSans9pt7b);
