@@ -369,6 +369,8 @@ void loop() {
         drawPostExtrusionOptionsPage();
         isPrinting = false;
         extrusionPhase = PHASE_NONE;
+        delay(50);
+        return;
         }
       } else if (status == FAILED) {
         emergencyHalt();
@@ -376,10 +378,11 @@ void loop() {
         currentPage = ERROR_PAGE;
         isPrinting = false;
         extrusionPhase = PHASE_NONE;
+        delay(50);
+        return;
       }
 
-      delay(50); 
-      return;
+      delay(50);
   }
 
   // ---- 4. Touch input dispatch ----
@@ -452,6 +455,9 @@ void loop() {
           break;
         case PRINTING_PAGE:
           handlePrintingTouch(touchX, touchY);
+          if (!isPrinting) {
+            extrusionPhase = PHASE_NONE;
+          }
           break;
         case POST_EXTRUSION_OPTIONS:
           handlePostExtrusionOptionsTouch(touchX, touchY);
