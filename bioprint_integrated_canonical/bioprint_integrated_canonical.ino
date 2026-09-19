@@ -53,13 +53,6 @@
 #include "extrusion_helpers.h"
 #include "ui_system.h"
 
-// ==================== COMPILE-TIME CONFIGURATION ====================
-#ifdef SKIP_TEMP_VALIDATION
-  #define TEMP_VALIDATION_REQUIRED false
-#else
-  #define TEMP_VALIDATION_REQUIRED true
-#endif
-
 // ==================== DISPLAY & TOUCH ====================
 GigaDisplay_GFX display;
 Arduino_GigaDisplayTouch touchDetector;
@@ -112,11 +105,6 @@ float cycleTargetVol2 = 0.0;
 
 // Zero retraction tracking
 unsigned long retractionStartTime = 0;
-bool calibrationComplete = false;
-
-// Shutdown tracking
-unsigned long shutdownStartTime = 0;
-bool shutdownInProgress = false;
 
 // ==================== SYSTEM CONFIGURATION ====================
 // SystemConfig struct moved to libraries/state_machine.h
@@ -132,15 +120,15 @@ bool isPrinting = false;
 
 // ==================== UTILITY FUNCTIONS ====================
 // Motor conversion helpers now delegated to libraries/motor_controller.h
-// See motor_controller.h for: mlToSteps, stepsToMl, mmsToStepsPerSec, stepsPerSecToTicUnits
+// See motor_controller.h for: mlToSteps, mmsToStepsPerSec, stepsPerSecToTicUnits
 
 // ==================== TEMPERATURE CONTROL FUNCTIONS (from pid_controller.h) ====================
 // updateTemperatures(), computeDualPID(), applyHeatControl() are now defined in libraries/pid_controller.h
 // These are called from the main loop and UI handlers without modification
 
 // ==================== MOTOR CONTROL ====================
-// initializeMotors(), syncPositionToTIC(), moveMotorsTo(), moveMotorsToWithSetSpeeds(),
-// moveMotorsTimedSync(), emergencyHalt() are all defined in motor_controller.h
+// initializeMotors(), syncPositionToTIC(), startMotorMove(), pollMotorMove(),
+// emergencyHalt() are all defined in motor_controller.h
 
 
 // Maps the current parameter page to the title and unit strings used by

@@ -7,7 +7,6 @@
 
 // External display object (declared in main .ino)
 extern GigaDisplay_GFX display;
-extern Arduino_GigaDisplayTouch touchDetector;
 
 // Color constants are #define macros from config.h — no extern declarations needed.
 
@@ -20,9 +19,7 @@ extern bool systemReady;
 extern bool heatControlEnabled;
 extern bool isPrinting;
 extern bool syringesTempReached;
-extern bool calibrationComplete;
 extern unsigned long retractionStartTime;
-extern unsigned long shutdownStartTime;
 extern unsigned long tempStableTime;
 extern SystemConfig config;
 extern float extrusionVolume;
@@ -45,9 +42,6 @@ extern const GFXfont FreeSansBold12pt7b;
 extern const GFXfont FreeSans9pt7b;
 
 // Functions declared in main file
-extern bool homeMotors();
-extern long pendingTargetPos1;
-extern long pendingTargetPos2;
 
 extern PendingMove pendingMove;
 
@@ -566,7 +560,7 @@ void drawHomeButton(int x, int y, const char* label, float value, const char* un
   }
 }
 
-void drawParameterPage(int* options, int numOptions, float currentValue, const char* title, const char* unit) {
+void drawParameterPage(int* options, int numOptions, const char* title, const char* unit) {
   display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setTextColor(TEXT_COLOR);
@@ -1243,7 +1237,6 @@ void goToErrorPage(){
 
 void onCalibrationArrived() {
   motorsHomed = true;
-  calibrationComplete = true;
   currentPage = WELCOME;
   drawWelcomePage();
 }
@@ -1362,19 +1355,19 @@ void handleHomeTouch(int x, int y) {
     if (y >= 120 && y <= 210) {
       currentPage = TEMPERATURE_PAGE;
       tempSelection = selectedTemp;
-      drawParameterPage((int*)TEMP_OPTIONS, NUM_TEMP_OPTIONS, tempSelection, "Temperature", "C");
+      drawParameterPage((int*)TEMP_OPTIONS, NUM_TEMP_OPTIONS, "Temperature", "C");
     } else if (y >= 230 && y <= 320) {
       currentPage = VOLUME1;
       tempSelection = selectedVol1;
-      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, tempSelection, "Volume 1", "mL");
+      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, "Volume 1", "mL");
     } else if (y >= 340 && y <= 430) {
       currentPage = VOLUME2;
       tempSelection = selectedVol2;
-      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, tempSelection, "Volume 2", "mL");
+      drawParameterPage((int*)VOL_OPTIONS, NUM_VOL_OPTIONS, "Volume 2", "mL");
     } else if (y >= 450 && y <= 540) {
       currentPage = CONCENTRATION;
       tempSelection = selectedConc;
-      drawParameterPage((int*)CONC_OPTIONS, NUM_CONC_OPTIONS, tempSelection, "Concentration", "%");
+      drawParameterPage((int*)CONC_OPTIONS, NUM_CONC_OPTIONS, "Concentration", "%");
     }
   }
   
@@ -1438,7 +1431,7 @@ void handleParameterTouch(int x, int y, int* options, int numOptions, float* tar
       const char* title;
       const char* unit;
       getCurrentPageInfo(&title, &unit);
-      drawParameterPage(options, numOptions, tempSelection, title, unit);
+      drawParameterPage(options, numOptions, title, unit);
     }
     return;
   }
@@ -1456,13 +1449,13 @@ void handleParameterTouch(int x, int y, int* options, int numOptions, float* tar
       const char* title;
       const char* unit;
       getCurrentPageInfo(&title, &unit);
-      drawParameterPage(options, numOptions, tempSelection, title, unit);
+      drawParameterPage(options, numOptions, title, unit);
     } else {
       tempSelection = options[0];
       const char* title;
       const char* unit;
       getCurrentPageInfo(&title, &unit);
-      drawParameterPage(options, numOptions, tempSelection, title, unit);
+      drawParameterPage(options, numOptions, title, unit);
     }
     return;
   }
@@ -1510,7 +1503,7 @@ void handleParameterTouch(int x, int y, int* options, int numOptions, float* tar
       const char* title;
       const char* unit;
       getCurrentPageInfo(&title, &unit);
-      drawParameterPage(options, numOptions, tempSelection, title, unit);
+      drawParameterPage(options, numOptions, title, unit);
       break;
     }
   }

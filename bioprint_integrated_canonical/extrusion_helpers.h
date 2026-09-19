@@ -9,7 +9,7 @@
  * 
  * Dependencies:
  * - config.h (for motor constants)
- * - motor_controller.h (for moveMotorsTimedSync)
+ * - motor_controller.h (for arduino_pos1/2 position tracking)
  * - state_machine.h (for structs and enums)
  */
 
@@ -19,10 +19,8 @@
 #include "state_machine.h"
 
 // Forward declarations 
-extern bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, float speed2_mms, float duration_sec);
 extern long arduino_pos1;
 extern long arduino_pos2;
-extern SystemState current_state;
 extern ExtrusionPlan extrusionPlan;
 
 // Motor constants (MM_PER_ML, MM_PER_STEP, STEPS_PER_ML, LOAD_POSITION) come from config.h
@@ -346,8 +344,8 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
   
   float phase1_speed_m1, phase2_speed_m1;
   float phase1_speed_m2, phase2_speed_m2;
-  long phase1_steps_m1, phase2_steps_m1;
-  long phase1_steps_m2, phase2_steps_m2;
+  long phase1_steps_m1;
+  long phase1_steps_m2;
   
   if (extrusionPlan.use_two_phase) {
     Serial.println("=== TWO-PHASE MOVEMENT ===");
@@ -367,7 +365,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
       phase2_speed_m1 = phase2_dist_m1 / remaining_time;
       
       phase1_steps_m1 = (long)(phase1_dist_m1 / MM_PER_STEP);
-      phase2_steps_m1 = (long)(phase2_dist_m1 / MM_PER_STEP);
       
       Serial.print("M1 BOOST: Phase1=");
       Serial.print(phase1_speed_m1, 2);
@@ -388,7 +385,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
       phase2_speed_m1 = phase2_dist_m1 / remaining_time;
       
       phase1_steps_m1 = (long)(phase1_dist_m1 / MM_PER_STEP);
-      phase2_steps_m1 = (long)(phase2_dist_m1 / MM_PER_STEP);
       
       Serial.print("M1 NORMAL: Phase1=");
       Serial.print(phase1_speed_m1, 2);
@@ -410,7 +406,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
       phase2_speed_m2 = phase2_dist_m2 / remaining_time;
       
       phase1_steps_m2 = (long)(phase1_dist_m2 / MM_PER_STEP);
-      phase2_steps_m2 = (long)(phase2_dist_m2 / MM_PER_STEP);
       
       Serial.print("M2 BOOST: Phase1=");
       Serial.print(phase1_speed_m2, 2);
@@ -430,7 +425,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
       phase2_speed_m2 = phase2_dist_m2 / remaining_time;
       
       phase1_steps_m2 = (long)(phase1_dist_m2 / MM_PER_STEP);
-      phase2_steps_m2 = (long)(phase2_dist_m2 / MM_PER_STEP);
       
       Serial.print("M2 NORMAL: Phase1=");
       Serial.print(phase1_speed_m2, 2);

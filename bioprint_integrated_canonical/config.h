@@ -27,22 +27,17 @@
 #define MM_PER_STEP 0.006f
 #define MM_PER_ML 6.05f
 
-// Motor limits
-#define MAX_VOLUME_ML 12.0f
-#define MAX_STEPS ((long)(MAX_VOLUME_ML * STEPS_PER_ML))
+// Motor positions
 #define LOAD_POSITION 15000L  // Loading position at top (fully retracted)
 
 // Speed control
-#define MAX_SPEED_MMS 50.0f                                      // mm/s (conservative max for hardware)
-#define MAX_SPEED_STEPS_S ((long)(MAX_SPEED_MMS / MM_PER_STEP)) // steps/second
-#define MAX_ACCEL 5000                                           // steps/s²
+#define MAX_ACCEL 5000  // steps/s²
 
 // Position tracking tolerance
 #define POSITION_TOLERANCE 10
 
 // ==================== THERMISTOR CONFIGURATION ====================
 // ADC Resolution: Unified 12-bit for Arduino GIGA
-#define ADC_RESOLUTION 12
 #define ADC_MAX_VALUE 4095
 
 // Physical thermistor setup
@@ -106,6 +101,4 @@
 // Motor zero retraction
 #define RETRACTION_DURATION 15000  // milliseconds - time for full retraction to zero
 
-// UI state machine timing
-#define UI_UPDATE_INTERVAL 100  // milliseconds
 #endif  // CONFIG_H
