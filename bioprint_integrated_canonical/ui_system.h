@@ -1527,7 +1527,7 @@ void handlePrintConfirmTouch(int x, int y) {
     delay(500);
     
     // Skip executeLoad - motors are already positioned from homing!
-    current_state = LOAD;  // Just set the state
+    setState(LOAD);
     
     if (!executeSetup(config, selectedVol1, selectedVol2, selectedConc)) {
       drawErrorPage("Setup failed");
@@ -1741,7 +1741,7 @@ void handlePrintingTouch(int x, int y) {
     config.dispensed1 = actualDispensed1;
     config.dispensed2 = actualDispensed2;
     
-    current_state = COMPLETE;
+    setState(COMPLETE);
     currentPage = READY_TO_PRINT;
     drawReadyToPrintPage();
   }

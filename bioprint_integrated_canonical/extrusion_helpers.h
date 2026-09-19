@@ -94,7 +94,7 @@ bool executePrime(SystemConfig &config) {
   config.prime_pos1 = arduino_pos1;
   config.prime_pos2 = arduino_pos2;
   
-  current_state = PRIMED;
+  setState(PRIMED);
   
   Serial.println("\n=== PRIME COMPLETE ===");
   Serial.print("Prime positions saved: M1=");
@@ -263,7 +263,7 @@ ExtrusionValidation validateExtrusion(SystemConfig &config, float total_volume_m
  * Sets current_state to EXTRUDING during execution, COMPLETE on success, SAFE_MODE on error
  */
 ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float print_time_sec) {
-  current_state = EXTRUDING;
+  setState(EXTRUDING);
   
   Serial.println("\n=== EXTRUSION START ===");
   Serial.print("Total volume requested: ");
@@ -294,24 +294,24 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
     Serial.print("mL but only ");
     Serial.print(config.remaining1, 2);
     Serial.println("mL remaining!");
-    current_state = COMPLETE;
+    setState(COMPLETE);
 
     extrusionPlan.ok = false;
     return extrusionPlan;
   }
-  
+
   if (extrusionPlan.vol2_to_dispense > config.remaining2) {
     Serial.print("ERROR: M2 requires ");
     Serial.print(extrusionPlan.vol2_to_dispense, 2);
     Serial.print("mL but only ");
     Serial.print(config.remaining2, 2);
     Serial.println("mL remaining!");
-    current_state = COMPLETE;
+    setState(COMPLETE);
 
     extrusionPlan.ok = false;
     return extrusionPlan;
   }
-  
+
   // Calculate speeds to finish at same time
   // speed = distance / time
   float dist1_mm = extrusionPlan.vol1_to_dispense * MM_PER_ML;
@@ -483,7 +483,7 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
   // Safety check: don't go below 1600 (0mL position)
   if (target1 < 1600 || target2 < 1600) {
     Serial.println("ERROR: Would go below 0mL (position 1600)!");
-    current_state = COMPLETE;
+    setState(COMPLETE);
     extrusionPlan.ok = false;
     return extrusionPlan;
   }
