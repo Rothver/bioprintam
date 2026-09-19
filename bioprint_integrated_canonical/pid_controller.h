@@ -45,8 +45,8 @@
 extern void logFault(const char* subsystem, const char* reason);
 
 // ==================== GLOBAL TEMPERATURE VARIABLES ====================
-// Setpoint temperatures (can be modified via UI)
-float Setpoint_HeatMat = SETPOINT_HEAT_MAT;    // Default: 80°C
+// Syringe setpoint (can be modified via UI). The heat mat setpoint is the
+// fixed SETPOINT_HEAT_MAT constant in config.h.
 float Setpoint_Syringe = SETPOINT_SYRINGE;    // Default: 35°C
 
 // Current temperatures from all 4 thermistors (set by updateTemperatures)
@@ -56,10 +56,6 @@ float currentTemperatures[NUM_THERMISTORS] = {-999, -999, -999, -999};
 float Input_HeatMat = 25.0f;      // Average of heat mat sensors (A0, A1)
 float Input_Syringe = 25.0f;      // Average of system sensors (A2, A3)
 float currentDisplayTemp = 25.0f; // Display temperature (usually A2)
-
-// PID gain parameters (configurable at compile-time via config.h)
-float Kp_HeatMat = KP_HEAT_MAT;   // Proportional gain for heat mat
-float Kp_Syringe = KP_SYRINGE;    // Proportional gain for syringe
 
 // PID control outputs (0-255 PWM range)
 float Output_HeatMat = 0.0f;

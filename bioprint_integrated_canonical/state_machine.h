@@ -104,12 +104,6 @@ struct SystemConfig {
   float syringe_vol1 = 10.0f;
   float syringe_vol2 = 10.0f;
   
-  // Per-cycle extrusion amount (mL)
-  float extrude_vol1 = 1.0f;
-  
-  // Speed control (mm/s)
-  float extrude_speed = 2.0f;
-  
   // Volume tracking (cumulative per session, mL)
   float dispensed1 = 0.0f;    // Total dispensed from motor 1
   float dispensed2 = 0.0f;    // Total dispensed from motor 2
@@ -146,20 +140,6 @@ struct ExtrusionPlan {
   float phase2_speed_m1, phase2_speed_m2;
 
   float vol1_to_dispense, vol2_to_dispense; 
-};
-
-// ==================== CYCLE TRACKING STRUCT ====================
-/*
- * Optional: tracks progress within multi-cycle print jobs
- */
-struct CycleTracking {
-  float cycle_start_dispensed1 = 0.0f;  // Cumulative dispensed at cycle start
-  float cycle_start_dispensed2 = 0.0f;
-  
-  float cycle_target_vol1 = 0.0f;       // Target volume for current cycle
-  float cycle_target_vol2 = 0.0f;
-  
-  unsigned long cycle_start_time = 0;   // Timestamp when cycle began
 };
 
 // ==================== UI OPTIONS ====================

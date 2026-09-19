@@ -7,7 +7,7 @@
  * - TIC I2C driver initialization and configuration
  * - Synchronized dual-motor movement with flexible speed control
  * - Robust position tracking with error handling
- * - Conversion utilities (mL ↔ steps, mm/s ↔ step/sec)
+ * - Conversion utilities (mL → steps, mm/s ↔ step/sec)
  * - Emergency halt and safe-start management
  * 
  * Hardware Requirements:
@@ -31,8 +31,11 @@
  *     initializeMotors();
  *   }
  *   
+ *   MotorMoveState move;
  *   void loop() {
- *     moveMotorsTo(5000, 5000, 10.0);  // Move to step 5000 at 10 mm/s
+ *     // Non-blocking: start once, then poll once per loop() pass
+ *     // startMotorMove(move, 5000, 5000, 10.0, 10.0);  // targets in steps, speeds in mm/s
+ *     // MotorMoveStatus s = pollMotorMove(move);       // MOVING / ARRIVED / FAILED
  *   }
  */
 
@@ -64,14 +67,6 @@ extern long arduino_pos2;
  */
 inline long mlToSteps(float ml) {
   return (long)(ml * STEPS_PER_ML);
-}
-
-/*
- * Convert motor steps to milliliters
- * Formula: volume = steps / STEPS_PER_ML
- */
-inline float stepsToMl(long steps) {
-  return (float)steps / STEPS_PER_ML;
 }
 
 /*
@@ -192,95 +187,6 @@ inline bool syncPositionToTIC() {
   return true;
 }
 
-/*
- * Set motor positions to specific values
- * Used for emergency halt or manual position correction
- */
-inline void haltAndSetPosition(long pos1, long pos2) {
-  tic1.haltAndSetPosition(pos1);
-  tic2.haltAndSetPosition(pos2);
-  
-  arduino_pos1 = pos1;
-  arduino_pos2 = pos2;
-  
-  delay(20);
-}
-
-inline bool waitForArrival(long target1, long target2) {
-  unsigned long start_time = millis();
-  
-  int consecutive_arrivals = 0;
-  const int REQUIRED_CONSECUTIVE = 3;
-  
-  long last_pos1 = arduino_pos1;
-  long last_pos2 = arduino_pos2;
-  int stationary_count = 0;
-  
-  
-  while (true) {
-    tic1.resetCommandTimeout();
-    tic2.resetCommandTimeout();
-    
-    long pos1 = tic1.getCurrentPosition();
-    long pos2 = tic2.getCurrentPosition();
-    
-    uint16_t err1 = tic1.getErrorStatus();
-    uint16_t err2 = tic2.getErrorStatus();
-    
-    if (err1 != 0 || err2 != 0) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    if (pos1 == last_pos1 && pos2 == last_pos2) {
-      stationary_count++;
-      
-      if (stationary_count >= MAX_STATIONARY) {
-        bool at_target1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-        bool at_target2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-        
-        if (at_target1 && at_target2) {
-          arduino_pos1 = target1;
-          arduino_pos2 = target2;
-          return true;
-        } else {
-          arduino_pos1 = pos1;
-          arduino_pos2 = pos2;
-          return false;
-        }
-      }
-    } else {
-      stationary_count = 0;
-      last_pos1 = pos1;
-      last_pos2 = pos2;
-    }
-    
-    bool arrived1 = abs(pos1 - target1) <= POSITION_TOLERANCE;
-    bool arrived2 = abs(pos2 - target2) <= POSITION_TOLERANCE;
-    
-    if (arrived1 && arrived2) {
-      consecutive_arrivals++;
-      
-      if (consecutive_arrivals >= REQUIRED_CONSECUTIVE) {
-        arduino_pos1 = target1;
-        arduino_pos2 = target2;
-        return true;
-      }
-    } else {
-      consecutive_arrivals = 0;
-    }
-    
-    if (millis() - start_time > 60000) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    delay(50);
-  }
-}
-
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
 
 
@@ -362,171 +268,6 @@ inline MotorMoveStatus pollMotorMove(MotorMoveState &state){
   }
   return MOVING;
 }
-
-/*
- * Move both motors to target positions at specified speed
- * Synchronizes speed across both motors (useful for precise synchronized extrusion)
- * 
- * Parameters:
- *   target1: Target position for motor 1 (steps)
- *   target2: Target position for motor 2 (steps)
- *   speed_mms: Speed in mm/s (same for both motors)
- * 
- * Returns:
- *   true if targets reached successfully
- *   false if error occurs, timeout, or position divergence detected
- * 
- * Features:
- * - Robust arrival detection (consecutive confirmations)
- * - Stationary detection (prevents infinite loops)
- * - Error recovery (clears errors, retries)
- * - 60-second timeout protection
- * - Position tracking updates on completion
- */
-inline bool moveMotorsTo(long target1, long target2, float speed_mms) {
-  if (!syncPositionToTIC()) {
-    return false;
-  }
-  
-  tic1.clearDriverError();
-  tic2.clearDriverError();
-  tic1.exitSafeStart();
-  tic2.exitSafeStart();
-  
-  long speed_steps = mmsToStepsPerSec(speed_mms);
-  tic1.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
-  tic2.setMaxSpeed(stepsPerSecToTicUnits(speed_steps));
-  
-  tic1.setTargetPosition(target1);
-  tic2.setTargetPosition(target2);
-  
-  return waitForArrival(target1, target2);
-}
-
-/*
- * Move both motors to targets using independently-configured speeds
- * Used when motors have different speed settings already configured via setMaxSpeed()
- * 
- * Parameters:
- *   target1: Target position for motor 1 (steps)
- *   target2: Target position for motor 2 (steps)
- * 
- * Returns:
- *   true if targets reached successfully
- *   false if error occurs or timeout
- * 
- * Note: Call tic1.setMaxSpeed() and tic2.setMaxSpeed() BEFORE this function
- */
-inline bool moveMotorsToWithSetSpeeds(long target1, long target2) {
-  if (!syncPositionToTIC()) {
-    return false;
-  }
-  
-  tic1.clearDriverError();
-  tic2.clearDriverError();
-  tic1.exitSafeStart();
-  tic2.exitSafeStart();
-  
-  tic1.setTargetPosition(target1);
-  tic2.setTargetPosition(target2);
-  
-  return waitForArrival(target1, target2);
-}
-
-/*
- * Synchronized timed movement: both motors finish at approximately the same time
- * 
- * Parameters:
- *   target1, target2: Target positions (steps)
- *   speed1_mms, speed2_mms: Individual speeds (mm/s) for each motor
- *   duration_sec: Total duration (used for validation, not enforcement)
- * 
- * Returns:
- *   true if both motors reached targets
- *   false if error or timeout
- * 
- * Purpose:
- * - Enable precise synchronized extrusion with independent ratios
- * - Each motor moves at its own speed, calculated to finish together
- * - Useful for dual-ratio extrusion (e.g., 70:30 polymer blend)
- */
-inline bool moveMotorsTimedSync(long target1, long target2, float speed1_mms, float speed2_mms, float duration_sec) {
-  if (!syncPositionToTIC()) {
-    return false;
-  }
-  
-  long start_pos1 = arduino_pos1;
-  long start_pos2 = arduino_pos2;
-  long dist1 = abs(target1 - start_pos1);
-  long dist2 = abs(target2 - start_pos2);
-  
-  tic1.clearDriverError();
-  tic2.clearDriverError();
-  tic1.exitSafeStart();
-  tic2.exitSafeStart();
-  
-  // Set independent speeds for each motor
-  tic1.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed1_mms)));
-  tic2.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed2_mms)));
-  
-  delay(50);
-  
-  // Start BOTH motors at the exact same time
-  tic1.setTargetPosition(target1);
-  tic2.setTargetPosition(target2);
-  
-  unsigned long start_time = millis();
-  
-  // Monitor until BOTH reach targets
-  bool m1_arrived = false;
-  bool m2_arrived = false;
-  unsigned long m1_finish_time = 0;
-  unsigned long m2_finish_time = 0;
-  
-  while (!m1_arrived || !m2_arrived) {
-    tic1.resetCommandTimeout();
-    tic2.resetCommandTimeout();
-    
-    long pos1 = tic1.getCurrentPosition();
-    long pos2 = tic2.getCurrentPosition();
-    
-    // Track when each motor arrives at its target
-    if (!m1_arrived && abs(pos1 - target1) <= POSITION_TOLERANCE) {
-      m1_arrived = true;
-      m1_finish_time = millis() - start_time;
-    }
-    
-    if (!m2_arrived && abs(pos2 - target2) <= POSITION_TOLERANCE) {
-      m2_arrived = true;
-      m2_finish_time = millis() - start_time;
-    }
-    
-    uint16_t err1 = tic1.getErrorStatus();
-    uint16_t err2 = tic2.getErrorStatus();
-    
-    if (err1 != 0 || err2 != 0) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    // Timeout after 60 seconds
-    if (millis() - start_time > 60000) {
-      arduino_pos1 = pos1;
-      arduino_pos2 = pos2;
-      return false;
-    }
-    
-    delay(50);
-  }
-  
-  // Update positions after successful sync
-  arduino_pos1 = target1;
-  arduino_pos2 = target2;
-  
-  return true;
-}
-
 
 // ==================== EMERGENCY HALT ====================
 
