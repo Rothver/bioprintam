@@ -22,6 +22,45 @@ enum SystemState {
   SAFE_MODE           // Error state - motors halted, heaters off
 };
 
+// ==================== STATE TRANSITION LOGGING ====================
+extern SystemState current_state;
+
+inline const char* stateToString(SystemState s) {
+  switch (s) {
+    case UNINITIALIZED: return "UNINITIALIZED";
+    case LOAD:           return "LOAD";
+    case SETUP:           return "SETUP";
+    case PRIMED:          return "PRIMED";
+    case READY:           return "READY";
+    case EXTRUDING:       return "EXTRUDING";
+    case COMPLETE:        return "COMPLETE";
+    case SAFE_MODE:       return "SAFE_MODE";
+    default:              return "UNKNOWN";
+  }
+}
+
+// Single choke point every finished log line passes through. Serial-only for
+// now; a future on-device persistence layer (e.g. QSPI flash) only needs to
+// change this one function, not every setState()/logFault() call site.
+inline void writeLogLine(const String& line) {
+  Serial.println(line);
+}
+
+//Sets the current state of the system while also logging the change in logs
+inline void setState(SystemState newState) {
+  if (newState == current_state) return;
+  writeLogLine("[STATE] t=" + String(millis()) + " " +
+               stateToString(current_state) + "->" + stateToString(newState));
+  current_state = newState;
+}
+
+// Logs an error/safety-trip event.
+// subsystem is a short tag (e.g. "motor", "temperature");
+// reason is a human-readable description of what went wrong.
+inline void logFault(const char* subsystem, const char* reason) {
+  writeLogLine("[FAULT] t=" + String(millis()) + " " + subsystem + ": " + reason);
+}
+
 // ==================== UI PAGE DEFINITIONS ====================
 enum Page {
   MOTOR_ZERO_CHECK,

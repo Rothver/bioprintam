@@ -49,6 +49,9 @@
 #include "config.h"
 #include "thermistor_sensor.h"
 
+// Defined in state_machine.h
+extern void logFault(const char* subsystem, const char* reason);
+
 // ==================== PID CONTROLLER STATE STRUCT ====================
 struct PIDController {
   float setpoint;          // Target temperature in °C
@@ -191,8 +194,22 @@ inline void updateTemperatures() {
  * - Syringe: Kp = KP_SYRINGE, setpoint = Setpoint_Syringe (user-adjustable, default 35°C)
  */
 inline void computeDualPID() {
+  static bool tempFaultLogged = false;
+  bool tempsInvalid = (Input_HeatMat < 0 || Input_Syringe < 0);
+
+  // Log once per fault episode, not once per loop() pass, since a
+  // disconnected thermistor can hold this condition for a long time.
+  if (tempsInvalid) {
+    if (!tempFaultLogged) {
+      logFault("temperature", "sensor reading invalid, heat output disabled");
+      tempFaultLogged = true;
+    }
+  } else {
+    tempFaultLogged = false;
+  }
+
   // Disable outputs if control is off or sensors are reading invalid temps
-  if (!heatControlEnabled || Input_HeatMat < 0 || Input_Syringe < 0) {
+  if (!heatControlEnabled || tempsInvalid) {
     Output_HeatMat = 0.0f;
     Output_Syringe = 0.0f;
     return;

@@ -315,6 +315,7 @@ void loop() {
       }
     } else if (status == FAILED) {
       pendingMove.active = false;
+      logFault("motor", pendingMove.failureMessage.c_str());
       emergencyHalt();
       pendingMove.onFailed();
     }
@@ -332,6 +333,7 @@ void loop() {
       extrusionPlan = prepareExtrude(config, extrusionVolume, printTime);
 
       if (!extrusionPlan.ok) {
+        logFault("motor", "Extrusion invalid");
         emergencyHalt();
         drawErrorPage("Extrusion invalid");
         currentPage = ERROR_PAGE;
@@ -364,7 +366,7 @@ void loop() {
         config.remaining1 -= extrusionPlan.vol1_to_dispense;
         config.remaining2 -= extrusionPlan.vol2_to_dispense;
 
-        current_state = COMPLETE;
+        setState(COMPLETE);
         currentPage = POST_EXTRUSION_OPTIONS;
         drawPostExtrusionOptionsPage();
         isPrinting = false;
@@ -373,6 +375,7 @@ void loop() {
         return;
         }
       } else if (status == FAILED) {
+        logFault("motor", "Extrusion failed");
         emergencyHalt();
         drawErrorPage("Extrusion failed");
         currentPage = ERROR_PAGE;
