@@ -28,17 +28,9 @@
  *   #include "thermistor_sensor.h"
  *   #include "pid_controller.h"
  *   
- *   // Global PID state
- *   PIDController heatMatPID, syringePID;
- *   
- *   void setup() {
- *     initPID(heatMatPID, KP_HEAT_MAT, SETPOINT_HEAT_MAT);
- *     initPID(syringePID, KP_SYRINGE, SETPOINT_SYRINGE);
- *   }
- *   
  *   void loop() {
- *     updateTemperatures(currentTemperatures);
- *     applyHeatControl();
+ *     updateTemperatures();
+ *     applyHeatControl();   // no-op (PWM 0) unless heatControlEnabled is true
  *   }
  */
 
@@ -51,17 +43,6 @@
 
 // Defined in state_machine.h
 extern void logFault(const char* subsystem, const char* reason);
-
-// ==================== PID CONTROLLER STATE STRUCT ====================
-struct PIDController {
-  float setpoint;          // Target temperature in °C
-  float kp;                // Proportional gain
-  float lastError;         // Previous error for derivative calculation (if used)
-  float integral;          // Accumulated integral error (for future I control)
-  float output;            // Last computed output (0-255 PWM range)
-  float currentInput;      // Last measured input temperature
-  bool enabled;            // Whether this controller is active
-};
 
 // ==================== GLOBAL TEMPERATURE VARIABLES ====================
 // Setpoint temperatures (can be modified via UI)
@@ -87,55 +68,6 @@ float Output_Syringe = 0.0f;
 // Status flags
 bool heatControlEnabled = false;   // Whether heating is active
 bool syringesTempReached = false;  // Whether syringe system at target temperature
-
-// ==================== INITIALIZATION ====================
-/*
- * Initialize a PID controller with setpoint and gain.
- * 
- * Parameters:
- *   controller: Reference to PIDController struct to initialize
- *   kp: Proportional gain (typical: 150.0)
- *   setpoint: Target temperature in °C
- */
-inline void initPID(PIDController &controller, float kp, float setpoint) {
-  controller.kp = kp;
-  controller.setpoint = setpoint;
-  controller.output = 0.0f;
-  controller.currentInput = 25.0f;
-  controller.lastError = 0.0f;
-  controller.integral = 0.0f;
-  controller.enabled = true;
-}
-
-// ==================== GENERIC PID COMPUTATION ====================
-/*
- * Compute PID output for a single control loop.
- * Currently implements P-only control. Can be extended for I and D terms.
- * 
- * Parameters:
- *   setpoint: Target temperature in °C
- *   currentValue: Measured temperature in °C
- *   deltaTime: Time step in seconds (unused for P-only, reserved for future use)
- * 
- * Returns:
- *   PID output value (0-255 for PWM applications)
- * 
- * Notes:
- * - P-only: output = Kp * error
- * - Output is clamped to 0-255 range for PWM
- * - Negative errors produce zero output (no cooling)
- */
-inline float computePID(float setpoint, float currentValue, float deltaTime) {
-  if (currentValue < 0 || currentValue > 150.0f) {
-    return 0.0f;  // Invalid temperature reading
-  }
-  
-  float error = setpoint - currentValue;
-  float output = 150.0f * error;  // Generic Kp = 150
-  output = constrain(output, 0.0f, 255.0f);
-  
-  return output;
-}
 
 // ==================== TEMPERATURE UPDATE ====================
 /*
@@ -185,7 +117,9 @@ inline void updateTemperatures() {
  * - Updates Output_HeatMat (0-255 PWM range)
  * - Updates Output_Syringe (0-255 PWM range)
  * - Disables outputs if temperatures are invalid (<0 indicates sensor error)
- * 
+ * - Disables outputs if the syringe exceeds Setpoint_Syringe by more than
+ *   SYRINGE_OVERTEMP_MARGIN (over-temperature backstop; logs a fault once per episode)
+ *
  * Control Logic:
  * - Proportional gain: error * Kp
  * - Output clamped to [0, 255] (PWM range)
@@ -208,8 +142,25 @@ inline void computeDualPID() {
     tempFaultLogged = false;
   }
 
-  // Disable outputs if control is off or sensors are reading invalid temps
-  if (!heatControlEnabled || tempsInvalid) {
+  // Backstop: syringe is well over its setpoint while heating is enabled.
+  // Checked only while heating is enabled so a syringe that is simply cooling
+  // down with heat off is not reported as a fault. Self-clears once the
+  // reading drops back under the limit; logs once per episode.
+  static bool overTempLogged = false;
+  bool syringeOverTemp = heatControlEnabled && !tempsInvalid &&
+                         (Input_Syringe > Setpoint_Syringe + SYRINGE_OVERTEMP_MARGIN);
+
+  if (syringeOverTemp) {
+    if (!overTempLogged) {
+      logFault("temperature", "syringe over setpoint limit, heat output disabled");
+      overTempLogged = true;
+    }
+  } else {
+    overTempLogged = false;
+  }
+
+  // Disable outputs if control is off, sensors are invalid, or the backstop tripped
+  if (!heatControlEnabled || tempsInvalid || syringeOverTemp) {
     Output_HeatMat = 0.0f;
     Output_Syringe = 0.0f;
     return;
@@ -232,12 +183,13 @@ inline void computeDualPID() {
  * Implements dual-zone control with zone priority logic.
  * 
  * Control Strategy:
- * 1. Before syringe reaches target temp: Use full heat mat output
- * 2. After syringe reaches target temp: Use min(heat mat, syringe) for stability
- * 
+ * - PWM = min(heat mat output, syringe output), so the syringe zone can only
+ *   ever reduce heating, and heating stops once the syringe reaches its setpoint
+ *
  * Safety:
  * - Computes fresh PID values before applying
- * - Sets PWM to 0 if control is disabled
+ * - Sets PWM to 0 if control is disabled, sensors are invalid, or the syringe
+ *   is more than SYRINGE_OVERTEMP_MARGIN over its setpoint (see computeDualPID)
  * - Outputs on MOSFET_PIN via Arduino PWM
  * 
  * Side Effects:
@@ -252,50 +204,16 @@ inline void applyHeatControl() {
     return;
   }
   
-  int finalPWM = 0;
-  
-  // Zone priority logic:
-  // - While warming up: prioritize heat mat heating (Output_HeatMat)
-  // - Once stable: limit to lower of two outputs for syringe protection
-  if (!syringesTempReached) {
-    finalPWM = (int)Output_HeatMat;
-  } else {
-    finalPWM = min((int)Output_HeatMat, (int)Output_Syringe);
-  }
-  
+  // Always take the lower of the two zone outputs. Output_Syringe is clamped to
+  // 0 whenever the syringe is at or above its setpoint, so the heater can never
+  // be driven on the mat's account while the syringe is already hot.
+  // While warming up, Output_Syringe saturates at 255 (any error above
+  // 255 / KP_SYRINGE, ~1.7 C at KP=150), so this equals Output_HeatMat there.
+  // If KP_SYRINGE is lowered, warm-up gets slower: the syringe term then limits
+  // output over a wider band below the setpoint.
+  int finalPWM = min((int)Output_HeatMat, (int)Output_Syringe);
+
   analogWrite(MOSFET_PIN, finalPWM);
-}
-
-// ==================== STATUS CHECKING HELPERS ====================
-/*
- * Check if syringe temperature is within tolerance of setpoint.
- * Used for state machine transitions and UI display updates.
- * 
- * Returns:
- *   true if syringe temperature is valid and within TEMP_TOLERANCE
- */
-inline bool isSyringeTempStable() {
-  return syringesTempReached;
-}
-
-/*
- * Check if heat mat temperature is valid (not sensor error).
- * 
- * Returns:
- *   true if heat mat reading is valid (> -999)
- */
-inline bool isHeatMatTempValid() {
-  return Input_HeatMat > -999.0f;
-}
-
-/*
- * Check if syringe temperature is valid (not sensor error).
- * 
- * Returns:
- *   true if syringe reading is valid (> -999)
- */
-inline bool isSyringeTempValid() {
-  return Input_Syringe > -999.0f;
 }
 
 #endif  // PID_CONTROLLER_H

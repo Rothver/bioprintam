@@ -85,6 +85,11 @@
 #define TEMP_STABLE_DURATION 3000  // milliseconds - time temp must be stable
 #define TEMP_TOLERANCE 2.0f        // °C - acceptable deviation from setpoint
 
+// Over-temperature backstop: if the syringe reads more than this many °C above
+// its setpoint while heating is enabled, heat output is forced to 0 and a fault
+// is logged
+#define SYRINGE_OVERTEMP_MARGIN 4.0f  // °C above Setpoint_Syringe
+
 // ==================== UI CONFIGURATION ====================
 // Color palette (16-bit RGB565)
 #define BG_COLOR 0xFFFF              // White background
