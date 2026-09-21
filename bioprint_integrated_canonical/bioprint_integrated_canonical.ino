@@ -253,24 +253,10 @@ void loop() {
       currentPage = CALIBRATION_IN_PROGRESS;
       drawCalibrationInProgressPage();
       delay(500);
-      pendingMove.target1_phase1 = 0;
-      pendingMove.target2_phase1 = 0;
-      pendingMove.speed1_phase1 = 1.0;
-      pendingMove.speed2_phase1 = 1.0;
-
-      pendingMove.target1_phase2 = LOAD_POSITION;
-      pendingMove.target2_phase2 = LOAD_POSITION;
-      pendingMove.speed1_phase2 = 2.0;
-      pendingMove.speed2_phase2 = 2.0;
-    
-      pendingMove.phaseCount = 2;
-      pendingMove.phaseIndex = 0;
-      pendingMove.phaseStarted = false;
-      pendingMove.active = true;
-      pendingMove.onProgress = drawCalibrationInProgressPage;
-      pendingMove.onArrived = onCalibrationArrived;
-      pendingMove.onFailed = goToErrorPage;
-      pendingMove.failureMessage = "Calibration failed: motors could not confirm position";
+      pendingMove.arm(0, 0, 1.0,
+                      drawCalibrationInProgressPage, onCalibrationArrived,
+                      "Calibration failed: motors could not confirm position");
+      pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
     }
     delay(50);
     return;
@@ -305,7 +291,7 @@ void loop() {
       pendingMove.active = false;
       logFault("motor", pendingMove.failureMessage.c_str());
       emergencyHalt();
-      pendingMove.onFailed();
+      goToErrorPage();   // every failed move ends on the error page, showing failureMessage
     }
 
     delay(50);

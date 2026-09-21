@@ -1284,24 +1284,10 @@ void handleMotorZeroCheckTouch(int x, int y) {
     drawCalibrationInProgressPage();
     delay(500);  // Show calibration page briefly
     
-    pendingMove.target1_phase1 = 0;
-    pendingMove.target2_phase1 = 0;
-    pendingMove.speed1_phase1 = 1.0;
-    pendingMove.speed2_phase1 = 1.0;
-
-    pendingMove.target1_phase2 = LOAD_POSITION;
-    pendingMove.target2_phase2 = LOAD_POSITION;
-    pendingMove.speed1_phase2 = 2.0;
-    pendingMove.speed2_phase2 = 2.0;
-    
-    pendingMove.phaseCount = 2;
-    pendingMove.phaseIndex = 0;
-    pendingMove.phaseStarted = false;
-    pendingMove.active = true;
-    pendingMove.onProgress = drawCalibrationInProgressPage;
-    pendingMove.onArrived = onCalibrationArrived;
-    pendingMove.onFailed = goToErrorPage;
-    pendingMove.failureMessage = "Calibration failed: motors could not confirm position";
+    pendingMove.arm(0, 0, 1.0,
+                    drawCalibrationInProgressPage, onCalibrationArrived,
+                    "Calibration failed: motors could not confirm position");
+    pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
 
     return;
   }
@@ -1334,19 +1320,9 @@ void handleShutdownConfirmTouch(int x, int y) {
     // Go to shutting down page
     currentPage = SHUTTING_DOWN;
 
-    pendingMove.target1_phase1 = 0;
-    pendingMove.target2_phase1 = 0;
-    pendingMove.speed1_phase1 = 0.5;
-    pendingMove.speed2_phase1 = 0.5;
-    
-    pendingMove.phaseCount = 1;
-    pendingMove.phaseIndex = 0;
-    pendingMove.phaseStarted = false;
-    pendingMove.active = true;
-    pendingMove.onProgress = drawShuttingDownPage;
-    pendingMove.onArrived = onShutdown;
-    pendingMove.onFailed = goToErrorPage;
-    pendingMove.failureMessage = "Shutdown failed: motors could not confirm position";
+    pendingMove.arm(0, 0, 0.5,
+                    drawShuttingDownPage, onShutdown,
+                    "Shutdown failed: motors could not confirm position");
     return;
   }
   
@@ -1664,19 +1640,9 @@ void handlePostExtrusionOptionsTouch(int x, int y) {
   if (x >= 320 && x <= 440 && y >= 450 && y <= 520) {
     Serial.println("FINISH pressed - returning motors to load position");
     // Move motors to 15000 (LOAD_POSITION)
-      pendingMove.target1_phase1 = LOAD_POSITION;
-      pendingMove.target2_phase1 = LOAD_POSITION;
-      pendingMove.speed1_phase1 = 3.0;
-      pendingMove.speed2_phase1 = 3.0;
-    
-      pendingMove.phaseCount = 1;
-      pendingMove.phaseIndex = 0;
-      pendingMove.phaseStarted = false;
-      pendingMove.active = true;
-      pendingMove.onProgress = drawCalibrationInProgressPage;
-      pendingMove.onArrived = onReturnToLoading;
-      pendingMove.onFailed = goToErrorPage;
-      pendingMove.failureMessage = "Failed to return to load position";
+      pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 3.0,
+                      drawCalibrationInProgressPage, onReturnToLoading,
+                      "Failed to return to load position");
       
       // Turn off heat
       heatControlEnabled = false;
@@ -1761,19 +1727,9 @@ void handlePrintDoneTouch(int x, int y) {
   if (x >= 40 && x <= 220 && y >= 550 && y <= 630) {
     Serial.println("FINISH pressed from PRINT_DONE - returning to start");
     // Move motors to LOAD_POSITION
-      pendingMove.target1_phase1 = LOAD_POSITION;
-      pendingMove.target2_phase1 = LOAD_POSITION;
-      pendingMove.speed1_phase1 = 3.0;
-      pendingMove.speed2_phase1 = 3.0;
-    
-      pendingMove.phaseCount = 1;
-      pendingMove.phaseIndex = 0;
-      pendingMove.phaseStarted = false;
-      pendingMove.active = true;
-      pendingMove.onProgress = drawCalibrationInProgressPage;
-      pendingMove.onArrived = onReturnToLoading;
-      pendingMove.onFailed = goToErrorPage;
-      pendingMove.failureMessage = "Failed to return to load position";
+      pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 3.0,
+                      drawCalibrationInProgressPage, onReturnToLoading,
+                      "Failed to return to load position");
       
       // Turn off heat
       heatControlEnabled = false;
@@ -1813,19 +1769,9 @@ void handleValidationErrorTouch(int x, int y) {
 
 void handleLoadingSyringesTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 580 && y <= 660) {    
-    pendingMove.target1_phase1 = LOAD_POSITION;
-    pendingMove.target2_phase1 = LOAD_POSITION;
-    pendingMove.speed1_phase1 = 2.0;
-    pendingMove.speed2_phase1 = 2.0;
-
-    pendingMove.phaseCount = 1;
-    pendingMove.phaseIndex = 0;
-    pendingMove.phaseStarted = false;
-    pendingMove.active = true;
-    pendingMove.onArrived = waitingForSyringes; 
-    pendingMove.onFailed = goToErrorPage;
-    pendingMove.onProgress = drawHomingPage;
-    pendingMove.failureMessage = "Failed to reach loading position";
+    pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 2.0,
+                    drawHomingPage, waitingForSyringes,
+                    "Failed to reach loading position");
     
     pendingMove.onProgress();
     currentPage = HOMING_PAGE; 
@@ -1850,19 +1796,9 @@ void handleWaitingForSyringesTouch(int x, int y) {
     long target1 = volumeToPosition(selectedVol1);
     long target2 = volumeToPosition(selectedVol2);
     
-    pendingMove.target1_phase1 = target1;
-    pendingMove.target2_phase1 = target2;
-    pendingMove.speed1_phase1 = 2.0;
-    pendingMove.speed2_phase1 = 2.0;
-
-    pendingMove.phaseCount = 1;
-    pendingMove.phaseIndex = 0;
-    pendingMove.phaseStarted = false;
-    pendingMove.active = true;
-    pendingMove.onArrived = goToPrintConfirmPage;
-    pendingMove.onFailed = goToErrorPage;
-    pendingMove.onProgress = drawHomingPage;
-    pendingMove.failureMessage = "Failed to reach volume position";
+    pendingMove.arm(target1, target2, 2.0,
+                    drawHomingPage, goToPrintConfirmPage,
+                    "Failed to reach volume position");
     
     pendingMove.onProgress();
     currentPage = HOMING_PAGE;

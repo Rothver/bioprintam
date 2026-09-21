@@ -105,6 +105,10 @@ struct MotorMoveState {
   int consecutive_arrivals;
 };
 
+// A move (one or two phases) that loop() services one poll per pass.
+// Always start one with arm() (plus addPhase() for a second phase): they set
+// every field loop() reads, so nothing stale from a previous move can leak in.
+// On failure loop() halts the motors, logs failureMessage and shows the error page.
 struct PendingMove {
   MotorMoveState moveState;
   bool active = false;
@@ -115,9 +119,34 @@ struct PendingMove {
   float speed1_phase1, speed2_phase1;
   float speed1_phase2, speed2_phase2;
   void (*onArrived)();
-  void (*onFailed)();
   String failureMessage;
   void (*onProgress)();
+
+  // Arm a single-phase move to (t1, t2) at `speed` mm/s for both motors.
+  // onProgress is called every pass while moving, onArrived once at the end.
+  void arm(long t1, long t2, float speed,
+           void (*progress)(), void (*arrived)(), const char* failMsg) {
+    target1_phase1 = t1;
+    target2_phase1 = t2;
+    speed1_phase1 = speed;
+    speed2_phase1 = speed;
+    phaseCount = 1;
+    phaseIndex = 0;
+    phaseStarted = false;
+    onProgress = progress;
+    onArrived = arrived;
+    failureMessage = failMsg;
+    active = true;   // last: loop() services the move as soon as this is set
+  }
+
+  // Chain a second phase after arm(); call it right after, before returning to loop().
+  void addPhase(long t1, long t2, float speed) {
+    target1_phase2 = t1;
+    target2_phase2 = t2;
+    speed1_phase2 = speed;
+    speed2_phase2 = speed;
+    phaseCount = 2;
+  }
 };
 
 // ==================== MOTOR INITIALIZATION ====================
