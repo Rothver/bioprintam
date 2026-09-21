@@ -370,8 +370,8 @@ void drawHomingPage() {
   display.setCursor(50, 360);
   display.print("2. Moving to volume position");
   if (selectedVol1 > 0 && selectedVol2 > 0) {
-    long target1 = 1600 + mlToSteps(selectedVol1);
-    long target2 = 1600 + mlToSteps(selectedVol2);
+    long target1 = volumeToPosition(selectedVol1);
+    long target2 = volumeToPosition(selectedVol2);
     display.setCursor(65, 390);
     display.print("M1: ");
     display.print(selectedVol1, 1);
@@ -479,8 +479,8 @@ void drawWaitingForSyringesPage() {
   display.setCursor(50, 490);
   display.print("Target volumes:");
   if (selectedVol1 > 0 && selectedVol2 > 0) {
-    long target1 = 1600 + mlToSteps(selectedVol1);
-    long target2 = 1600 + mlToSteps(selectedVol2);
+    long target1 = volumeToPosition(selectedVol1);
+    long target2 = volumeToPosition(selectedVol2);
     display.setCursor(50, 520);
     display.print("M1: ");
     display.print(selectedVol1, 1);
@@ -1224,6 +1224,22 @@ void drawValidationErrorPage(String error_msg, String suggestions) {
   display.endBuffering();
 }
 
+// Validates the current extrusion request (volume/time vs. syringe contents,
+// plunger travel and motor speed limits). On failure: logs it
+bool validateExtrusionOrShowError() {
+  ExtrusionValidation validation = validateExtrusion(config, extrusionVolume, printTime);
+  if (validation.is_valid) return true;
+  
+  Serial.println("=== EXTRUSION VALIDATION FAILED ===");
+  Serial.println(validation.error_message);
+  Serial.println("Suggestions:");
+  Serial.println(validation.suggestion);
+  
+  currentPage = VALIDATION_ERROR_PAGE;
+  drawValidationErrorPage(validation.error_message, validation.suggestion);
+  return false;
+}
+
 void goToPrintConfirmPage() {
   drawPrintConfirmPage();
   currentPage = PRINT_CONFIRM;
@@ -1608,20 +1624,7 @@ void handleExtrusionSetupTouch(int x, int y) {
   
   // START button
   if (x >= 90 && x <= 390 && y >= 600 && y <= 680) {
-    // VALIDATE EXTRUSION BEFORE STARTING
-    ExtrusionValidation validation = validateExtrusion(config, extrusionVolume, printTime);
-    
-    if (!validation.is_valid) {
-      // Show validation error with suggestions
-      Serial.println("=== EXTRUSION VALIDATION FAILED ===");
-      Serial.println(validation.error_message);
-      Serial.println("Suggestions:");
-      Serial.println(validation.suggestion);
-      
-      drawValidationErrorPage(validation.error_message, validation.suggestion);
-      // Stay on same page type (will go back on BACK button)
-      return;
-    }
+    if (!validateExtrusionOrShowError()) return;
     
     // Validation passed - proceed to print
     Serial.println("=== EXTRUSION VALIDATED ===");
@@ -1693,6 +1696,10 @@ void handlePostExtrusionOptionsTouch(int x, int y) {
 
 void handleReadyToPrintTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 500 && y <= 620) {
+    // Re-validate: syringe contents change after every cycle, and "same
+    // extrusion" / cancel paths reach this page without passing setup again
+    if (!validateExtrusionOrShowError()) return;
+    
     // Initialize cycle tracking
     cycleStartDispensed1 = config.dispensed1;
     cycleStartDispensed2 = config.dispensed2;
@@ -1793,7 +1800,10 @@ void handleErrorTouch(int x, int y) {
     return;
   }
   
-  // Validation error page BACK button (goes back to extrusion setup)
+}
+
+void handleValidationErrorTouch(int x, int y) {
+  // BACK button (goes back to extrusion setup to adjust volume/time)
   if (x >= 140 && x <= 340 && y >= 680 && y <= 750) {
     currentPage = EXTRUSION_SETUP;
     drawExtrusionSetupPage();
@@ -1837,8 +1847,8 @@ void handleWaitingForSyringesTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 600 && y <= 680) {
 
     // Move motors to the target volume positions
-    long target1 = 1600 + mlToSteps(selectedVol1);
-    long target2 = 1600 + mlToSteps(selectedVol2);
+    long target1 = volumeToPosition(selectedVol1);
+    long target2 = volumeToPosition(selectedVol2);
     
     pendingMove.target1_phase1 = target1;
     pendingMove.target2_phase1 = target2;

@@ -70,6 +70,14 @@ inline long mlToSteps(float ml) {
 }
 
 /*
+ * Convert a syringe volume to the plunger position that holds it
+ * Formula: position = ZERO_ML_POSITION + volume_ml * STEPS_PER_ML
+ */
+inline long volumeToPosition(float ml) {
+  return ZERO_ML_POSITION + mlToSteps(ml);
+}
+
+/*
  * Convert mm/s to steps/second for TIC control
  * Formula: steps/s = (mm/s) / MM_PER_STEP
  */

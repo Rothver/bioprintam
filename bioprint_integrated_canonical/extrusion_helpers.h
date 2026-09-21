@@ -16,6 +16,7 @@
 #ifndef EXTRUSION_HELPERS_H
 #define EXTRUSION_HELPERS_H
 
+#include "config.h"
 #include "state_machine.h"
 
 // Forward declarations 
@@ -103,6 +104,65 @@ bool executePrime(SystemConfig &config) {
   return true;
 }
 
+// ==================== BOOST PLANNING HELPERS ====================
+
+/*
+ * True if a motor dispensing vol_ml at speed_mms needs the friction-boost phase.
+ * Shared by validateExtrusion() and prepareExtrude().
+ * A motor that dispenses (almost) nothing, e.g. at 0% or 100% concentration,
+ * must never be boosted: it would push material it shouldn't, and its
+ * "remaining distance" after the boost would be negative.
+ */
+inline bool motorNeedsBoost(float vol_ml, float speed_mms, float print_time_sec) {
+  return (vol_ml >= MIN_DISPENSE_VOLUME_ML && speed_mms < SLOW_SPEED_THRESHOLD && print_time_sec > BOOST_DURATION);
+}
+
+// Per-motor result of splitting an extrusion into boost/phase-1 and phase-2
+struct MotorPhasePlan {
+  float phase1_speed;   // mm/s
+  float phase2_speed;   // mm/s
+  long phase1_steps;    // steps moved during phase 1
+};
+
+/*
+ * Split one motor's total travel into phase 1 (BOOST_DURATION seconds) and
+ * phase 2 (the remaining time), and log the split.
+ *   needs_boost: phase 1 runs at BOOST_SPEED to break static friction
+ *   otherwise:   travel is split proportionally to time, so both phases run
+ *                at the same speed the single-phase plan would have used
+ */
+inline MotorPhasePlan planMotorPhases(const char* motor_name, float dist_mm, bool needs_boost, float print_time_sec) {
+  float remaining_time = print_time_sec - BOOST_DURATION;
+  float phase1_dist, phase2_dist;
+  MotorPhasePlan plan;
+
+  if (needs_boost) {
+    plan.phase1_speed = BOOST_SPEED;
+    phase1_dist = BOOST_SPEED * BOOST_DURATION;
+    phase2_dist = dist_mm - phase1_dist;
+    plan.phase2_speed = phase2_dist / remaining_time;
+  } else {
+    phase1_dist = dist_mm * (BOOST_DURATION / print_time_sec);
+    phase2_dist = dist_mm - phase1_dist;
+    plan.phase1_speed = phase1_dist / BOOST_DURATION;
+    plan.phase2_speed = phase2_dist / remaining_time;
+  }
+  plan.phase1_steps = (long)(phase1_dist / MM_PER_STEP);
+
+  Serial.print(motor_name);
+  Serial.print(needs_boost ? " BOOST: Phase1=" : " NORMAL: Phase1=");
+  Serial.print(plan.phase1_speed, 2);
+  Serial.print("mm/s (");
+  Serial.print(phase1_dist, 2);
+  Serial.print("mm), Phase2=");
+  Serial.print(plan.phase2_speed, 3);
+  Serial.print("mm/s (");
+  Serial.print(phase2_dist, 2);
+  Serial.println("mm)");
+
+  return plan;
+}
+
 // ==================== EXTRUSION VALIDATION ====================
 
 /*
@@ -131,13 +191,6 @@ ExtrusionValidation validateExtrusion(SystemConfig &config, float total_volume_m
   result.error_message = "";
   result.suggestion = "";
   
-  // Boost system constants
-  const float SLOW_SPEED_THRESHOLD = 1.0f;  // mm/s - below this triggers boost
-  const float BOOST_SPEED = 2.0f;           // mm/s - speed during boost phase
-  const float BOOST_DURATION = 1.0f;        // seconds - duration of boost
-  const float MIN_VIABLE_SPEED = 0.3f;      // mm/s - below this motor stalls
-  const float MIN_DISTANCE_FOR_BOOST = BOOST_SPEED * BOOST_DURATION * 1.1f;  // 2.2mm with safety margin
-  
   // Calculate volumes for each motor based on ratio
   float vol1_to_dispense = total_volume_ml * config.ratio1;
   float vol2_to_dispense = total_volume_ml * config.ratio2;
@@ -159,10 +212,39 @@ ExtrusionValidation validateExtrusion(SystemConfig &config, float total_volume_m
     String motor_name = (motor == 1) ? "M1" : "M2";
     
     // Skip if motor doesn't need to move
-    if (vol_ml < 0.01f) continue;
+    if (vol_ml < MIN_DISPENSE_VOLUME_ML) continue;
+    
+    // CAPACITY CASE A: not enough material left in this syringe
+    float remaining_ml = (motor == 1) ? config.remaining1 : config.remaining2;
+    if (vol_ml > remaining_ml) {
+      result.is_valid = false;
+      result.error_message = motor_name + " syringe low";
+      result.error_message += "\nNeeds: " + String(vol_ml, 2) + "mL";
+      result.error_message += "\nHas: " + String(remaining_ml, 2) + "mL";
+      
+      float max_total_vol = (ratio > 0.0f) ? (remaining_ml / ratio) : 0.0f;
+      if (max_total_vol < 0.1f) {
+        result.suggestion = "Reload syringes";
+      } else {
+        result.suggestion = "Decrease volume to <" + String(max_total_vol, 1) + "mL";
+        result.suggestion += "\nOR reload syringes";
+      }
+      return result;
+    }
+    
+    // CAPACITY CASE B: plunger would travel past the 0 mL position
+    long current_pos = (motor == 1) ? arduino_pos1 : arduino_pos2;
+    if (current_pos - (long)(vol_ml * STEPS_PER_ML) < ZERO_ML_POSITION) {
+      result.is_valid = false;
+      result.error_message = motor_name + " out of travel";
+      result.error_message += "\nWould pass the 0 mL position";
+      result.suggestion = "Reload syringes";
+      result.suggestion += "\nOR decrease volume";
+      return result;
+    }
     
     // Check if motor will need boost
-    bool needs_boost = (speed_mms < SLOW_SPEED_THRESHOLD && print_time_sec > BOOST_DURATION);
+    bool needs_boost = motorNeedsBoost(vol_ml, speed_mms, print_time_sec);
     
     if (needs_boost) {
       // CASE 1: Needs boost but distance too short for boost phase
@@ -258,9 +340,20 @@ ExtrusionValidation validateExtrusion(SystemConfig &config, float total_volume_m
  * 
  * Returns: true if extrusion completed successfully, false if error
  * 
- * Sets current_state to EXTRUDING during execution, COMPLETE on success, SAFE_MODE on error
+ * Rejects the request (plan.ok = false, state unchanged) if validateExtrusion() fails;
+ * otherwise sets current_state to EXTRUDING
  */
 ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float print_time_sec) {
+  // The UI validates before printing; re-check here so an unvalidated or stale
+  // request can never reach the motors. Nothing changes state on rejection.
+  ExtrusionValidation check = validateExtrusion(config, total_volume_ml, print_time_sec);
+  if (!check.is_valid) {
+    Serial.println("ERROR: extrusion rejected by validation:");
+    Serial.println(check.error_message);
+    extrusionPlan.ok = false;
+    return extrusionPlan;
+  }
+  
   setState(EXTRUDING);
   
   Serial.println("\n=== EXTRUSION START ===");
@@ -285,31 +378,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
   Serial.print(extrusionPlan.vol2_to_dispense, 3);
   Serial.println("mL)");
   
-  // SAFETY CHECK: Ensure sufficient volume in each syringe
-  if (extrusionPlan.vol1_to_dispense > config.remaining1) {
-    Serial.print("ERROR: M1 requires ");
-    Serial.print(extrusionPlan.vol1_to_dispense, 2);
-    Serial.print("mL but only ");
-    Serial.print(config.remaining1, 2);
-    Serial.println("mL remaining!");
-    setState(COMPLETE);
-
-    extrusionPlan.ok = false;
-    return extrusionPlan;
-  }
-
-  if (extrusionPlan.vol2_to_dispense > config.remaining2) {
-    Serial.print("ERROR: M2 requires ");
-    Serial.print(extrusionPlan.vol2_to_dispense, 2);
-    Serial.print("mL but only ");
-    Serial.print(config.remaining2, 2);
-    Serial.println("mL remaining!");
-    setState(COMPLETE);
-
-    extrusionPlan.ok = false;
-    return extrusionPlan;
-  }
-
   // Calculate speeds to finish at same time
   // speed = distance / time
   float dist1_mm = extrusionPlan.vol1_to_dispense * MM_PER_ML;
@@ -330,126 +398,35 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
   Serial.print(speed2_mms, 3);
   Serial.println(" mm/s");
   
-  // ACCELERATION RAMP for slow motors (< 1.0 mm/s)
+  // ACCELERATION RAMP for slow motors (< SLOW_SPEED_THRESHOLD mm/s)
   // To overcome static friction, boost slow motors at startup
-  const float SLOW_SPEED_THRESHOLD = 1.0f;
-  const float BOOST_SPEED = 2.0f;
-  const float BOOST_DURATION = 1.0f;
-  
-  bool motor1_needs_boost = (speed1_mms < SLOW_SPEED_THRESHOLD && print_time_sec > BOOST_DURATION);
-  bool motor2_needs_boost = (speed2_mms < SLOW_SPEED_THRESHOLD && print_time_sec > BOOST_DURATION);
+  bool motor1_needs_boost = motorNeedsBoost(extrusionPlan.vol1_to_dispense, speed1_mms, print_time_sec);
+  bool motor2_needs_boost = motorNeedsBoost(extrusionPlan.vol2_to_dispense, speed2_mms, print_time_sec);
   
   // If EITHER motor needs boost, BOTH motors do two-phase movement
   extrusionPlan.use_two_phase = (motor1_needs_boost || motor2_needs_boost) && (print_time_sec > BOOST_DURATION);
   
-  float phase1_speed_m1, phase2_speed_m1;
-  float phase1_speed_m2, phase2_speed_m2;
-  long phase1_steps_m1;
-  long phase1_steps_m2;
-  
   if (extrusionPlan.use_two_phase) {
     Serial.println("=== TWO-PHASE MOVEMENT ===");
     
-    // BOTH motors execute Phase 1 and Phase 2 together
-    // Phase 1: BOOST_DURATION seconds
-    // Phase 2: Remaining time
+    // BOTH motors execute Phase 1 (BOOST_DURATION seconds) and Phase 2 (remaining time) together
+    MotorPhasePlan m1 = planMotorPhases("M1", dist1_mm, motor1_needs_boost, print_time_sec);
+    MotorPhasePlan m2 = planMotorPhases("M2", dist2_mm, motor2_needs_boost, print_time_sec);
     
-    float remaining_time = print_time_sec - BOOST_DURATION;
-    
-    // Motor 1 calculations
-    if (motor1_needs_boost) {
-      // M1 gets boost in Phase 1
-      phase1_speed_m1 = BOOST_SPEED;
-      float phase1_dist_m1 = BOOST_SPEED * BOOST_DURATION;
-      float phase2_dist_m1 = dist1_mm - phase1_dist_m1;
-      phase2_speed_m1 = phase2_dist_m1 / remaining_time;
-      
-      phase1_steps_m1 = (long)(phase1_dist_m1 / MM_PER_STEP);
-      
-      Serial.print("M1 BOOST: Phase1=");
-      Serial.print(phase1_speed_m1, 2);
-      Serial.print("mm/s (");
-      Serial.print(phase1_dist_m1, 2);
-      Serial.print("mm), Phase2=");
-      Serial.print(phase2_speed_m1, 3);
-      Serial.print("mm/s (");
-      Serial.print(phase2_dist_m1, 2);
-      Serial.println("mm)");
-    } else {
-      // M1 doesn't need boost - calculate speeds to match total distance/time
-      // Distribute distance across two phases proportionally
-      float phase1_dist_m1 = dist1_mm * (BOOST_DURATION / print_time_sec);
-      float phase2_dist_m1 = dist1_mm - phase1_dist_m1;
-      
-      phase1_speed_m1 = phase1_dist_m1 / BOOST_DURATION;
-      phase2_speed_m1 = phase2_dist_m1 / remaining_time;
-      
-      phase1_steps_m1 = (long)(phase1_dist_m1 / MM_PER_STEP);
-      
-      Serial.print("M1 NORMAL: Phase1=");
-      Serial.print(phase1_speed_m1, 2);
-      Serial.print("mm/s (");
-      Serial.print(phase1_dist_m1, 2);
-      Serial.print("mm), Phase2=");
-      Serial.print(phase2_speed_m1, 3);
-      Serial.print("mm/s (");
-      Serial.print(phase2_dist_m1, 2);
-      Serial.println("mm)");
-    }
-    
-    // Motor 2 calculations
-    if (motor2_needs_boost) {
-      // M2 gets boost in Phase 1
-      phase1_speed_m2 = BOOST_SPEED;
-      float phase1_dist_m2 = BOOST_SPEED * BOOST_DURATION;
-      float phase2_dist_m2 = dist2_mm - phase1_dist_m2;
-      phase2_speed_m2 = phase2_dist_m2 / remaining_time;
-      
-      phase1_steps_m2 = (long)(phase1_dist_m2 / MM_PER_STEP);
-      
-      Serial.print("M2 BOOST: Phase1=");
-      Serial.print(phase1_speed_m2, 2);
-      Serial.print("mm/s (");
-      Serial.print(phase1_dist_m2, 2);
-      Serial.print("mm), Phase2=");
-      Serial.print(phase2_speed_m2, 3);
-      Serial.print("mm/s (");
-      Serial.print(phase2_dist_m2, 2);
-      Serial.println("mm)");
-    } else {
-      // M2 doesn't need boost - calculate speeds to match total distance/time
-      float phase1_dist_m2 = dist2_mm * (BOOST_DURATION / print_time_sec);
-      float phase2_dist_m2 = dist2_mm - phase1_dist_m2;
-      
-      phase1_speed_m2 = phase1_dist_m2 / BOOST_DURATION;
-      phase2_speed_m2 = phase2_dist_m2 / remaining_time;
-      
-      phase1_steps_m2 = (long)(phase1_dist_m2 / MM_PER_STEP);
-      
-      Serial.print("M2 NORMAL: Phase1=");
-      Serial.print(phase1_speed_m2, 2);
-      Serial.print("mm/s (");
-      Serial.print(phase1_dist_m2, 2);
-      Serial.print("mm), Phase2=");
-      Serial.print(phase2_speed_m2, 3);
-      Serial.print("mm/s (");
-      Serial.print(phase2_dist_m2, 2);
-      Serial.println("mm)");
-    }
-    extrusionPlan.phase1_target1 = arduino_pos1 - phase1_steps_m1;
-    extrusionPlan.phase1_target2 = arduino_pos2 - phase1_steps_m2;
+    extrusionPlan.phase1_target1 = arduino_pos1 - m1.phase1_steps;
+    extrusionPlan.phase1_target2 = arduino_pos2 - m2.phase1_steps;
 
-    extrusionPlan.phase1_speed_m1 = phase1_speed_m1;
-    extrusionPlan.phase1_speed_m2 = phase1_speed_m2;
-    extrusionPlan.phase2_speed_m1 = phase2_speed_m1;
-    extrusionPlan.phase2_speed_m2 = phase2_speed_m2;
+    extrusionPlan.phase1_speed_m1 = m1.phase1_speed;
+    extrusionPlan.phase1_speed_m2 = m2.phase1_speed;
+    extrusionPlan.phase2_speed_m1 = m1.phase2_speed;
+    extrusionPlan.phase2_speed_m2 = m2.phase2_speed;
   } else {
     extrusionPlan.use_two_phase = false;
     extrusionPlan.phase2_speed_m1 = speed1_mms;
     extrusionPlan.phase2_speed_m2 = speed2_mms;
   }
   
-  // Calculate target positions (extrusion moves DOWN toward 1600)
+  // Calculate target positions (extrusion moves DOWN toward ZERO_ML_POSITION)
   long steps1 = (long)(extrusionPlan.vol1_to_dispense * STEPS_PER_ML);
   long steps2 = (long)(extrusionPlan.vol2_to_dispense * STEPS_PER_ML);
   
@@ -474,13 +451,6 @@ ExtrusionPlan prepareExtrude(SystemConfig &config, float total_volume_ml, float 
   Serial.print(", M2=");
   Serial.println(target2);
   
-  // Safety check: don't go below 1600 (0mL position)
-  if (target1 < 1600 || target2 < 1600) {
-    Serial.println("ERROR: Would go below 0mL (position 1600)!");
-    setState(COMPLETE);
-    extrusionPlan.ok = false;
-    return extrusionPlan;
-  }
   extrusionPlan.ok = true;
   return extrusionPlan;
 }
