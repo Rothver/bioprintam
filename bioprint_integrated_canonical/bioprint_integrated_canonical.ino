@@ -459,6 +459,9 @@ void loop() {
         case ERROR_PAGE:
           handleErrorTouch(touchX, touchY);
           break;
+        case VALIDATION_ERROR_PAGE:
+          handleValidationErrorTouch(touchX, touchY);
+          break;
         default:
           break;
       }

@@ -87,7 +87,8 @@ enum Page {
   SHUTDOWN_CONFIRM,
   SHUTTING_DOWN,
   SHUTDOWN_COMPLETE,
-  ERROR_PAGE
+  ERROR_PAGE,
+  VALIDATION_ERROR_PAGE
 };
 
 // ==================== SYSTEM CONFIGURATION STRUCT ====================

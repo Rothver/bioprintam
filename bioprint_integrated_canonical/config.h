@@ -29,6 +29,7 @@
 
 // Motor positions
 #define LOAD_POSITION 15000L  // Loading position at top (fully retracted)
+#define ZERO_ML_POSITION 1600L  // Plunger position where a syringe holds 0 mL (testing apparatus offset)
 
 // Speed control
 #define MAX_ACCEL 5000  // steps/s²
@@ -84,6 +85,15 @@
 // its setpoint while heating is enabled, heat output is forced to 0 and a fault
 // is logged
 #define SYRINGE_OVERTEMP_MARGIN 4.0f  // °C above Setpoint_Syringe
+
+// ==================== EXTRUSION BOOST CONFIGURATION ====================
+// Slow motors need a short high-speed "boost" phase to overcome static friction.
+#define SLOW_SPEED_THRESHOLD 1.0f  // mm/s - below this triggers boost
+#define BOOST_SPEED 2.0f           // mm/s - speed during boost phase
+#define BOOST_DURATION 1.0f        // seconds - duration of boost
+#define MIN_VIABLE_SPEED 0.3f      // mm/s - below this motor stalls
+#define MIN_DISTANCE_FOR_BOOST (BOOST_SPEED * BOOST_DURATION * 1.1f)  // 2.2mm with safety margin
+#define MIN_DISPENSE_VOLUME_ML 0.01f  // mL - a motor dispensing less than this is treated as not moving
 
 // ==================== UI CONFIGURATION ====================
 // Color palette (16-bit RGB565)
