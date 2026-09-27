@@ -90,6 +90,33 @@ void drawActionButton(int x, int y, int width, int height, int radius, uint16_t 
   display.print(label2);
 }
 
+// Determines radius of degree measurement ring for temperature display
+int degreeRingRadius() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds("C", 0, 0, &x1, &y1, &w, &h);
+  int r = h / 5;
+  return (r < 2) ? 2 : r;
+}
+
+// Prints a degree ring followed by "C"
+void printDegreesC(uint16_t color) {
+  int16_t x = display.getCursorX();
+  int16_t y = display.getCursorY();
+
+  // y1 = top edge of a "C" at this cursor, so the ring sits at cap height
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds("C", x, y, &x1, &y1, &w, &h);
+
+  int r = degreeRingRadius();
+  display.drawCircle(x + r, y1 + r, r, color);
+  if (r >= 4) display.drawCircle(x + r, y1 + r, r - 1, color);  // thicken for large fonts
+
+  display.setCursor(x + 2 * r + 2, y);
+  display.print("C");
+}
+
 void drawMotorZeroCheckPage() {
   display.startBuffering();
   display.fillScreen(BG_COLOR);
@@ -318,9 +345,12 @@ void drawWelcomePage() {
   display.setCursor(80, 545);
   display.print("A0: ");
   display.print(currentTemperatures[0], 1);
-  display.print(" C  A1: ");
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
+  display.print("  A1: ");
   display.print(currentTemperatures[1], 1);
-  display.print(" C");
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
   
   display.setCursor(80, 560);
   if (motorsHomed) {
@@ -522,7 +552,7 @@ void drawHomeButton(int x, int y, const char* label, float value, const char* un
   display.setFont(&FreeSans9pt7b);
   display.setCursor(x + 15, y + 65);
   if (value < 0) {
-    display.print("Not Selected");
+    display.print("Not Set");
   } else {
     display.print("Selected: ");
     
@@ -536,9 +566,10 @@ void drawHomeButton(int x, int y, const char* label, float value, const char* un
       display.print(value, 1);
       display.print(" ");
       if (unit[0] == 'C') {
-        display.write(248);
+        printDegreesC(BUTTON_TEXT_COLOR);
+      } else {
+        display.print(unit);
       }
-      display.print(unit);
     }
   }
 }
@@ -576,7 +607,7 @@ void drawParameterPage(int* options, int numOptions, const char* title, const ch
       float inverse = 100 - tempSelection;
       valueStr = String(tempSelection, 0) + ":" + String(inverse, 0) + "%";
     } else if (unit[0] == 'C') {
-      valueStr = String(tempSelection, 1) + " " + String((char)248) + unit;
+      valueStr = String(tempSelection, 1) + " C";  // measured here; ring drawn separately below
     } else {
       valueStr = String(tempSelection, 1) + " " + unit;
     }
@@ -586,11 +617,19 @@ void drawParameterPage(int* options, int numOptions, const char* title, const ch
     uint16_t w, h;
     display.getTextBounds(valueStr, 0, 0, &x1, &y1, &w, &h);
 
+    bool isTemp = (unit[0] == 'C');
+    if (isTemp) w += 2 * degreeRingRadius() + 2;  // account for the degree ring's width
+
     int valueBoxX = boxX + buttonSize + buttonSpacing;
     int textX = valueBoxX + (boxWidth - w) / 2 - x1;
     int textY = boxY + (boxHeight - h) / 2 - y1;
     display.setCursor(textX, textY);
-    display.print(valueStr);
+    if (isTemp) {
+      display.print(String(tempSelection, 1) + " ");
+      printDegreesC(BUTTON_TEXT_COLOR);
+    } else {
+      display.print(valueStr);
+    }
   }
   
   drawActionButton(boxX + buttonSize + buttonSpacing + boxWidth + buttonSpacing, boxY, buttonSize, boxHeight, 10, CONFIRM_COLOR, "+", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
@@ -678,7 +717,7 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(x, y + 40);
   if (value < 0) {
-    display.print("Not Selected");
+    display.print("Not Set");
   } else {
     if (unit[0] == '%') {
       float inverse = 100 - value;
@@ -690,9 +729,10 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
       display.print(value, 1);
       display.print(" ");
       if (unit[0] == 'C') {
-        display.write(248);
+        printDegreesC(TEXT_COLOR);
+      } else {
+        display.print(unit);
       }
-      display.print(unit);
     }
   }
 }
@@ -713,11 +753,15 @@ void drawLoadingPage() {
   display.setCursor(50, 235);
   if (currentDisplayTemp > -999.0) {
     display.print(currentDisplayTemp, 1);
-    display.print(" C / ");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
+    display.print(" / ");
     display.print(Setpoint_Syringe, 0);
-    display.print(" C");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
   } else {
-    display.print("--- C");
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
   }
   
   display.setFont(&FreeSans9pt7b);
@@ -727,9 +771,13 @@ void drawLoadingPage() {
   display.setCursor(50, 315);
   if (Input_HeatMat > -999.0) {
     display.print(Input_HeatMat, 1);
-    display.print(" C / 80 C");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
+    display.print(" / 80 ");
+    printDegreesC(TEXT_COLOR);
   } else {
-    display.print("--- C");
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
   }
   
   display.setFont(&FreeSans9pt7b);
@@ -756,14 +804,18 @@ void drawLoadingPage() {
   display.setCursor(50, 520);
   display.print("A0:");
   display.print(currentTemperatures[0], 1);
+  printDegreesC(TEXT_COLOR);
   display.print(" A1:");
   display.print(currentTemperatures[1], 1);
+  printDegreesC(TEXT_COLOR);
   
   display.setCursor(50, 550);
   display.print("A2:");
   display.print(currentTemperatures[2], 1);
+  printDegreesC(TEXT_COLOR);
   display.print(" A3:");
   display.print(currentTemperatures[3], 1);
+  printDegreesC(TEXT_COLOR);
   
   drawActionButton(140, 680, 200, 80, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
 
@@ -786,11 +838,15 @@ void drawTempReadyPage() {
   display.setCursor(50, 240);
   if (currentDisplayTemp > -999.0) {
     display.print(currentDisplayTemp, 1);
-    display.print(" C / ");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
+    display.print(" / ");
     display.print(Setpoint_Syringe, 0);
-    display.print(" C");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
   } else {
-    display.print("--- C");
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
   }
   
   display.setFont(&FreeSans9pt7b);
@@ -798,9 +854,11 @@ void drawTempReadyPage() {
   display.print("Heat Mat: ");
   if (Input_HeatMat > -999.0) {
     display.print(Input_HeatMat, 1);
-    display.print(" C");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
   } else {
-    display.print("--- C");
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
   }
   
   display.setFont(&FreeSans9pt7b);
@@ -840,14 +898,18 @@ void drawTempReadyPage() {
   display.setCursor(50, 510);
   display.print("A0=");
   display.print(currentTemperatures[0], 1);
+  printDegreesC(TEXT_COLOR);
   display.print(" A1=");
   display.print(currentTemperatures[1], 1);
+  printDegreesC(TEXT_COLOR);
   
   display.setCursor(50, 540);
   display.print("A2=");
   display.print(currentTemperatures[2], 1);
+  printDegreesC(TEXT_COLOR);
   display.print(" A3=");
   display.print(currentTemperatures[3], 1);
+  printDegreesC(TEXT_COLOR);
   
   if (systemReady) {
     drawActionButton(90, 600, 300, 80, 10, CONFIRM_COLOR, "YES", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
@@ -992,9 +1054,12 @@ void drawReadyToPrintPage() {
   display.setCursor(50, 180);
   display.print("Temperature: ");
   display.print(Input_Syringe, 1);
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
   display.print(" / ");
   display.print(Setpoint_Syringe, 0);
-  display.print(" C");
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
   
   display.setCursor(50, 230);
   display.print("Remaining:");
@@ -1040,9 +1105,11 @@ void drawPrintingPage() {
   display.setCursor(50, 195);
   if (currentDisplayTemp > -999.0) {
     display.print(currentDisplayTemp, 1);
-    display.print(" C");
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
   } else {
-    display.print("--- C");
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
   }
   
   display.setFont(&FreeSans9pt7b);
@@ -1051,7 +1118,8 @@ void drawPrintingPage() {
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 270);
   display.print(Setpoint_Syringe, 1);
-  display.print(" C");
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
   
   display.setFont(&FreeSans9pt7b);
   display.setCursor(50, 320);
@@ -1126,7 +1194,8 @@ void drawPrintDonePage() {
   display.print("Final Temperature:");
   display.setCursor(80, 460);
   display.print(currentDisplayTemp, 1);
-  display.print(" C");
+  display.print(" ");
+  printDegreesC(TEXT_COLOR);
   
   // FINISH button (return to start)
   drawActionButton(40, 550, 180, 80, 10, CLEAR_COLOR, "FINISH", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
