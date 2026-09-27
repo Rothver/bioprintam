@@ -103,9 +103,6 @@ float cycleStartDispensed2 = 0.0;
 float cycleTargetVol1 = 0.0;       // Target volume for this cycle
 float cycleTargetVol2 = 0.0;
 
-// Zero retraction tracking
-unsigned long retractionStartTime = 0;
-
 // ==================== SYSTEM CONFIGURATION ====================
 // SystemConfig struct moved to libraries/state_machine.h
 SystemConfig config;
@@ -221,10 +218,11 @@ void loop() {
   }
 
   // ---- 2. Non-blocking motor retraction to zero ----
-  // Entered when user presses NO on the motor-zero-check screen.
-  // Motors are commanded once, then resetCommandTimeout() is called each
-  // iteration to keep the TIC alive. After RETRACTION_DURATION the loop
-  // halts the motors and advances to calibration.
+  // Entered when user presses NO on the motor-zero-check screen. Motors are
+  // commanded once toward a far-off crawl target (RETRACTION_CRAWL_TARGET)
+  // and just keep moving at 0.5 mm/s; resetCommandTimeout() runs every
+  // iteration to keep the TIC alive for as long as the user needs. There is
+  // no time limit - the only way out is the AT ZERO button on this page.
   static bool retractionStarted = false;
   if (currentPage == RETRACTING_TO_ZERO) {
     if (!retractionStarted) {
@@ -235,29 +233,32 @@ void loop() {
       long slowSpeed = stepsPerSecToTicUnits(mmsToStepsPerSec(0.5f));
       tic1.setMaxSpeed(slowSpeed);
       tic2.setMaxSpeed(slowSpeed);
-      tic1.setTargetPosition(0);
-      tic2.setTargetPosition(0);
+      tic1.setTargetPosition(RETRACTION_CRAWL_TARGET);
+      tic2.setTargetPosition(RETRACTION_CRAWL_TARGET);
       retractionStarted = true;
     }
     tic1.resetCommandTimeout();
     tic2.resetCommandTimeout();
     drawRetractingToZeroPage();
 
-    if (millis() - retractionStartTime >= RETRACTION_DURATION) {
-      tic1.haltAndHold();
-      tic2.haltAndHold();
-      arduino_pos1 = 0;
-      arduino_pos2 = 0;
-      retractionStarted = false;
-
-      currentPage = CALIBRATION_IN_PROGRESS;
-      drawCalibrationInProgressPage();
-      delay(500);
-      pendingMove.arm(0, 0, 1.0,
-                      drawCalibrationInProgressPage, onCalibrationArrived,
-                      "Calibration failed: motors could not confirm position");
-      pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
+    // Poll touch here (rather than falling through to section 4's shared
+    // dispatch) since this block always returns before reaching it.
+    uint8_t contacts;
+    GDTpoint_t points[5];
+    contacts = touchDetector.getTouchPoints(points);
+    if (contacts > 0) {
+      if (!lastTouchState) {
+        lastTouchState = true;
+        handleRetractingToZeroTouch(points[0].x, points[0].y);
+      }
+    } else {
+      lastTouchState = false;
     }
+
+    if (currentPage != RETRACTING_TO_ZERO) {
+      retractionStarted = false;  // button press moved us on - reset for next time
+    }
+
     delay(50);
     return;
   }

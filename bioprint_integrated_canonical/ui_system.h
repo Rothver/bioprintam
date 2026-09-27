@@ -19,7 +19,6 @@ extern bool systemReady;
 extern bool heatControlEnabled;
 extern bool isPrinting;
 extern bool syringesTempReached;
-extern unsigned long retractionStartTime;
 extern unsigned long tempStableTime;
 extern SystemConfig config;
 extern float extrusionVolume;
@@ -121,56 +120,40 @@ void drawMotorZeroCheckPage() {
   display.setFont(&FreeSans9pt7b);
   display.setTextColor(TEXT_COLOR);
   display.setCursor(50, 650);
-  display.print("If NO: Motors will retract");
+  display.print("If NO: Motors retract slowly");
   display.setCursor(50, 680);
-  display.print("slowly for 15 seconds");
+  display.print("until you confirm zero");
   display.endBuffering();
 }
 
 void drawRetractingToZeroPage() {
   display.startBuffering();
-  unsigned long elapsed = millis() - retractionStartTime;
-  unsigned long remaining = RETRACTION_DURATION - elapsed;
-  float progress = (float)elapsed / (float)RETRACTION_DURATION * 100.0;
-  
-  if (progress > 100.0) progress = 100.0;
-  
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
-  
+
   display.setCursor(40, 150);
   display.print("RETRACTING");
   display.setCursor(90, 190);
   display.print("TO ZERO");
-  
+
   display.setFont(&FreeSans9pt7b);
   display.setCursor(80, 280);
   display.print("Moving motors slowly...");
-  display.setCursor(100, 310);
-  display.print("Please wait");
-  
-  // Progress bar
-  display.drawRect(50, 380, 380, 40, TEXT_COLOR);
-  int fillWidth = (int)(370.0 * progress / 100.0);
-  display.fillRect(55, 385, fillWidth, 30, CONFIRM_COLOR);
-  
-  // Time remaining
-  display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(140, 470);
-  display.print(remaining / 1000);
-  display.print(" sec");
-  
-  display.setFont(&FreeSans9pt7b);
-  display.setCursor(120, 530);
-  display.print("Progress: ");
-  display.print((int)progress);
-  display.print("%");
-  
-  display.setCursor(50, 630);
+  display.setCursor(50, 320);
+  display.print("Watch the syringes and press");
+  display.setCursor(50, 350);
+  display.print("the button below once they");
+  display.setCursor(50, 380);
+  display.print("reach true zero.");
+
+  display.setCursor(50, 440);
   display.print("Slow speed: 0.5 mm/s");
-  display.setCursor(50, 660);
-  display.print("Safe retraction in progress");
+  display.setCursor(50, 470);
+  display.print("No time limit - take as long as needed");
+
+  // AT ZERO button - halts the motors and confirms this position as zero
+  drawActionButton(60, 520, 360, 140, 10, CONFIRM_COLOR, "AT ZERO", &FreeSansBold18pt7b);
   display.endBuffering();
 }
 
@@ -1296,13 +1279,37 @@ void handleMotorZeroCheckTouch(int x, int y) {
   if (x >= 250 && x <= 430 && y >= 480 && y <= 600) {
     Serial.println("User indicated motors NOT at zero - starting retraction");
     currentPage = RETRACTING_TO_ZERO;
-    retractionStartTime = millis();
-    
-    // Start retraction using large negative target position
-    // This will move motors backward slowly for 15 seconds
-    Serial.println("Starting retraction to position -5000 at 0.5 mm/s");
-    
+
+    // Motors crawl toward RETRACTION_CRAWL_TARGET until the user presses AT ZERO
+    Serial.println("Starting retraction - waiting for user to confirm zero");
+
     drawRetractingToZeroPage();
+    return;
+  }
+}
+
+void handleRetractingToZeroTouch(int x, int y) {
+  // AT ZERO button - user has visually confirmed the syringes are at physical zero
+  if (x >= 60 && x <= 420 && y >= 520 && y <= 660) {
+    Serial.println("User confirmed motors physically at zero - halting retraction");
+    tic1.haltAndHold();
+    tic2.haltAndHold();
+
+    // Redefine this physical point as position 0 on the TIC's own step counter,
+    // not just the Arduino-side variables below - otherwise the next
+    // syncPositionToTIC() call would push the TIC's old (wrong) count back in.
+    tic1.haltAndSetPosition(0);
+    tic2.haltAndSetPosition(0);
+    arduino_pos1 = 0;
+    arduino_pos2 = 0;
+
+    currentPage = CALIBRATION_IN_PROGRESS;
+    drawCalibrationInProgressPage();
+    delay(500);  // Show calibration page briefly
+    pendingMove.arm(0, 0, 1.0,
+                    drawCalibrationInProgressPage, onCalibrationArrived,
+                    "Calibration failed: motors could not confirm position");
+    pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
     return;
   }
 }

@@ -30,6 +30,9 @@
 // Motor positions
 #define LOAD_POSITION 15000L  // Loading position at top (fully retracted)
 #define ZERO_ML_POSITION 1600L  // Plunger position where a syringe holds 0 mL (testing apparatus offset)
+#define RETRACTION_CRAWL_TARGET -20000L  // steps - far past any real position, so the manual
+                                          // zero retraction keeps crawling until the user
+                                          // presses the AT ZERO button instead of arriving early
 
 // Speed control
 #define MAX_ACCEL 5000  // steps/s²
@@ -106,9 +109,5 @@
 #define CANCEL_COLOR 0xF800          // Red (cancel)
 #define CLEAR_COLOR 0xFD20           // Light color
 #define HEAT_ACTIVE_COLOR 0xFC60      // Amber (heat active)
-
-// ==================== TIMING CONSTANTS ====================
-// Motor zero retraction
-#define RETRACTION_DURATION 15000  // milliseconds - time for full retraction to zero
 
 #endif  // CONFIG_H
