@@ -1890,11 +1890,12 @@ void handleWaitingForSyringesTouch(int x, int y) {
 void drawHeatIndicator(){
   static bool wasHeatOn = false;
   if (heatControlEnabled) {
-    drawActionButton(400, 10, 60, 40, 10, HEAT_ACTIVE_COLOR, "HEAT", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+    drawActionButton(EMERGENCY_BTN_X, EMERGENCY_BTN_Y, EMERGENCY_BTN_W, EMERGENCY_BTN_H, 10,
+                     HEAT_ACTIVE_COLOR, "EMERGENCY", &FreeSans9pt7b, BUTTON_TEXT_COLOR, "OFF");
     wasHeatOn = true;
     return;
   } else if (wasHeatOn){
-    display.fillRoundRect(400, 10, 60, 40, 10, BG_COLOR);
+    display.fillRoundRect(EMERGENCY_BTN_X, EMERGENCY_BTN_Y, EMERGENCY_BTN_W, EMERGENCY_BTN_H, 10, BG_COLOR);
     wasHeatOn = false;
     return;
   } 
