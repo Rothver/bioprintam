@@ -374,10 +374,18 @@ void loop() {
     if (!lastTouchState) {
       lastTouchState = true;
 
-      if (heatControlEnabled && (touchX >= 400 && touchX <= 460) && (touchY >= 10 && touchY <= 50)) {
+      // EMERGENCY OFF: Kills heat, halts both motors, abandons any extrusion in progress.
+      if (heatControlEnabled &&
+          touchX >= EMERGENCY_BTN_X && touchX <= EMERGENCY_BTN_X + EMERGENCY_BTN_W &&
+          touchY >= EMERGENCY_BTN_Y && touchY <= EMERGENCY_BTN_Y + EMERGENCY_BTN_H) {
         heatControlEnabled = false;
         analogWrite(MOSFET_PIN, 0);
-        Serial.println("Heat control forced off by user (manual kill switch)");
+        emergencyHalt();
+        isPrinting = false;
+        extrusionPhase = PHASE_NONE;  // otherwise the next print resumes mid-phase
+        logFault("user", "EMERGENCY OFF pressed: heat off, motors halted");
+        drawErrorPage("Emergency off pressed");
+        currentPage = ERROR_PAGE;
         return;
       }
 
