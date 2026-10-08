@@ -110,4 +110,16 @@
 #define CLEAR_COLOR 0xFD20           // Light color
 #define HEAT_ACTIVE_COLOR 0xFC60      // Amber (heat active)
 
+// EMERGENCY OFF button (top-right, shown on every page while heat is on).
+// Shared by drawHeatIndicator() and the touch check in loop() so the drawn
+// button and its touch area can't drift apart.
+#define EMERGENCY_BTN_X 355
+#define EMERGENCY_BTN_Y 5
+#define EMERGENCY_BTN_W 115
+#define EMERGENCY_BTN_H 50
+
+// ==================== TIMING CONSTANTS ====================
+// Motor zero retraction
+#define RETRACTION_DURATION 15000  // milliseconds - time for full retraction to zero
+
 #endif  // CONFIG_H
