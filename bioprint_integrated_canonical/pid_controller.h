@@ -65,6 +65,9 @@ float Output_Syringe = 0.0f;
 bool heatControlEnabled = false;   // Whether heating is active
 bool syringesTempReached = false;  // Whether syringe system at target temperature
 
+int heatPWMCap = 255;
+int lastHeatMatPWM = 0;
+
 // ==================== TEMPERATURE UPDATE ====================
 /*
  * Read all 4 thermistors and update temperature state variables.
@@ -197,9 +200,10 @@ inline void applyHeatControl() {
   
   if (!heatControlEnabled) {
     analogWrite(MOSFET_PIN, 0);
+    lastHeatMatPWM = 0;
     return;
   }
-  
+
   // Always take the lower of the two zone outputs. Output_Syringe is clamped to
   // 0 whenever the syringe is at or above its setpoint, so the heater can never
   // be driven on the mat's account while the syringe is already hot.
@@ -208,8 +212,10 @@ inline void applyHeatControl() {
   // If KP_SYRINGE is lowered, warm-up gets slower: the syringe term then limits
   // output over a wider band below the setpoint.
   int finalPWM = min((int)Output_HeatMat, (int)Output_Syringe);
+  finalPWM = min(finalPWM, heatPWMCap);
 
   analogWrite(MOSFET_PIN, finalPWM);
+  lastHeatMatPWM = finalPWM;
 }
 
 #endif  // PID_CONTROLLER_H

@@ -209,6 +209,16 @@ void setup() {
 // ==================== MAIN LOOP ====================
 void loop() {
 
+  static bool printCapArmed = false;
+  bool printingNow = (isPrinting && currentPage == PRINTING_PAGE);
+  if (printingNow && !printCapArmed) {
+    heatPWMCap = lastHeatMatPWM;
+    printCapArmed = true;
+  } else if (!printingNow) {
+    heatPWMCap = 255;
+    printCapArmed = false;
+  }
+
   // ---- 1. Temperature update (timer-gated) ----
   static unsigned long lastTempUpdate = 0;
   if (millis() - lastTempUpdate >= TEMP_UPDATE_INTERVAL) {
