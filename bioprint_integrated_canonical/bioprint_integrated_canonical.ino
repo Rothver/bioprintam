@@ -211,8 +211,10 @@ void loop() {
 
   // ---- 1. Temperature update (timer-gated) ----
   static unsigned long lastTempUpdate = 0;
+  static bool tempsUpdated = false;
   if (millis() - lastTempUpdate >= TEMP_UPDATE_INTERVAL) {
     updateTemperatures();
+    tempsUpdated = true;
     applyHeatControl();
     lastTempUpdate = millis();
   }
@@ -465,17 +467,17 @@ void loop() {
     lastTouchState = false;
   }
 
-  // ---- 5. TEMP_READY: advance to systemReady after stable duration ----
+  // ---- 5. Live page values: patch only the changing values on a new reading ----
+  if (tempsUpdated) {
+    updateCurrentPageValues();
+  }
+
+  // ---- 6. TEMP_READY: advance to systemReady after stable duration ----
   if (currentPage == TEMP_READY) {
-     static unsigned long lastTempReadyRedraw = 0;
-      if (millis() - lastTempReadyRedraw >= 500){
-        drawTempReadyPage();
-        lastTempReadyRedraw = millis();
-      }
 #ifdef SKIP_TEMP_VALIDATION
     if (!systemReady && current_state == PRIMED) {
       systemReady = true;
-      drawTempReadyPage();
+      redrawTempReadyStatus();
     }
 #else
     bool tempOk = (Input_Syringe > -999.0f) &&
@@ -487,25 +489,19 @@ void loop() {
         tempStableTime = millis();
       } else if (!systemReady && (millis() - tempStableTime >= TEMP_STABLE_DURATION)) {
         systemReady = true;
-        drawTempReadyPage();
+        redrawTempReadyStatus();
       }
     } else {
       tempStableTime = 0;
-      systemReady = false;
+      // Only act on the ready -> not-ready edge, so the YES button is removed once rather than redrawn every pass.
+      if (systemReady) {
+        systemReady = false;
+        redrawTempReadyStatus();
+      }
     }
 #endif
   }
 
-  // ---- 6. LOADING_PAGE: periodic redraw with live temperature values ----
-  if (currentPage == LOADING_PAGE) {
-    static unsigned long lastLoadingRedraw = 0;
-    if (millis() - lastLoadingRedraw >= 500) {
-      drawLoadingPage();
-      lastLoadingRedraw = millis();
-    }
-  }
-
+  tempsUpdated = false;
   delay(10);
-
-  drawHeatIndicator();
 }

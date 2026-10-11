@@ -737,18 +737,29 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
   }
 }
 
-void drawLoadingPage() {
-  display.startBuffering();
-  display.fillScreen(BG_COLOR);
-  display.setFont(&FreeSansBold18pt7b);
+void drawHeatIndicator(){
+  if (heatControlEnabled) {
+    display.startBuffering();
+    drawActionButton(EMERGENCY_BTN_X, EMERGENCY_BTN_Y, EMERGENCY_BTN_W, EMERGENCY_BTN_H, 10, HEAT_ACTIVE_COLOR,"EMERGENCY", &FreeSans9pt7b, BUTTON_TEXT_COLOR, "OFF");
+    display.endBuffering();
+  }
+}
+
+// Erases one row of value text back to the page background so it can be
+// reprinted. top/height are pixel bounds (not the text baseline), and the
+// row spans the content column (x 50..450) used by the value pages.
+void clearValueRow(int16_t top, int16_t height) {
+  display.fillRect(50, top, 400, height, BG_COLOR);
+}
+
+// Redraws only the live values on the Loading page (temperatures, PWM, phase).
+// Does NOT buffer on its own: call it inside startBuffering()/endBuffering()
+// so the erase and reprint land in a single screen refresh.
+void updateLoadingValues() {
   display.setTextColor(TEXT_COLOR);
-  display.setCursor(80, 150);
-  display.print("LOADING...");
-  
-  display.setFont(&FreeSans9pt7b);
-  
-  display.setCursor(50, 200);
-  display.print("Syringe Temperature:");
+
+  // Syringe temperature (12pt bold, baseline 235)
+  clearValueRow(213, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 235);
   if (currentDisplayTemp > -999.0) {
@@ -764,9 +775,8 @@ void drawLoadingPage() {
     printDegreesC(TEXT_COLOR);
   }
   
-  display.setFont(&FreeSans9pt7b);
-  display.setCursor(50, 280);
-  display.print("Heat Mat Temperature:");
+  // Heat mat temperature (12pt bold, baseline 315)
+  clearValueRow(293, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 315);
   if (Input_HeatMat > -999.0) {
@@ -780,9 +790,9 @@ void drawLoadingPage() {
     printDegreesC(TEXT_COLOR);
   }
   
+  // PWM %, heating phase and raw A0-A3 readings (9pt, baselines 400-550). Clears the area before reprinting.
+  clearValueRow(384, 172);
   display.setFont(&FreeSans9pt7b);
-  display.setCursor(50, 370);
-  display.print("PWM Values:");
   display.setCursor(50, 400);
   display.print("Heat Mat PID: ");
   display.print((Output_HeatMat / 255.0) * 100.0, 1);
@@ -816,24 +826,39 @@ void drawLoadingPage() {
   display.print(" A3:");
   display.print(currentTemperatures[3], 1);
   printDegreesC(TEXT_COLOR);
-  
-  drawActionButton(140, 680, 200, 80, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
-
-  display.endBuffering();
 }
 
-void drawTempReadyPage() {
+// Full Loading page: static labels and buttons, then the live values.
+void drawLoadingPage() {
   display.startBuffering();
   display.fillScreen(BG_COLOR);
   display.setFont(&FreeSansBold18pt7b);
   display.setTextColor(TEXT_COLOR);
-  display.setCursor(80, 120);
-  display.print("READY?");
-  
+  display.setCursor(80, 150);
+  display.print("LOADING...");
+
   display.setFont(&FreeSans9pt7b);
-  
   display.setCursor(50, 200);
   display.print("Syringe Temperature:");
+  display.setCursor(50, 280);
+  display.print("Heat Mat Temperature:");
+  display.setCursor(50, 370);
+  display.print("PWM Values:");
+
+  updateLoadingValues();
+
+  drawActionButton(140, 680, 200, 80, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+
+  drawHeatIndicator();
+  display.endBuffering();
+}
+
+// Redraws only the live values on the Temp Ready page
+void updateTempReadyValues() {
+  display.setTextColor(TEXT_COLOR);
+
+  // Syringe temperature (12pt bold, baseline 240)
+  clearValueRow(218, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 240);
   if (currentDisplayTemp > -999.0) {
@@ -849,6 +874,8 @@ void drawTempReadyPage() {
     printDegreesC(TEXT_COLOR);
   }
   
+  // Heat mat, status list and A0-A3 (9pt, baselines 290-540). Clear them as one block.
+  clearValueRow(274, 273);
   display.setFont(&FreeSans9pt7b);
   display.setCursor(50, 290);
   display.print("Heat Mat: ");
@@ -910,13 +937,44 @@ void drawTempReadyPage() {
   display.print(" A3=");
   display.print(currentTemperatures[3], 1);
   printDegreesC(TEXT_COLOR);
-  
+}
+
+// Draws the Temp Ready YES button when systemReady, otherwise erases its area.
+void drawTempReadyButton() {
   if (systemReady) {
     drawActionButton(90, 600, 300, 80, 10, CONFIRM_COLOR, "YES", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
+  } else {
+    display.fillRect(90, 600, 300, 80, BG_COLOR);
   }
+}
+
+// Call when systemReady flips while on Temp Ready: refreshes the status list and shows/hides the YES button
+void redrawTempReadyStatus() {
+  display.startBuffering();
+  updateTempReadyValues();
+  drawTempReadyButton();
+  display.endBuffering();
+}
+
+// Full Temp Ready page: static labels and buttons, then the live values.
+void drawTempReadyPage() {
+  display.startBuffering();
+  display.fillScreen(BG_COLOR);
+  display.setFont(&FreeSansBold18pt7b);
+  display.setTextColor(TEXT_COLOR);
+  display.setCursor(80, 120);
+  display.print("READY?");
+
+  display.setFont(&FreeSans9pt7b);
+  display.setCursor(50, 200);
+  display.print("Syringe Temperature:");
+
+  updateTempReadyValues();
+  drawTempReadyButton();
   
   drawActionButton(140, 700, 200, 60, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
 
+  drawHeatIndicator();
   display.endBuffering();
 }
 
@@ -992,6 +1050,7 @@ void drawExtrusionSetupPage() {
   drawActionButton(90, 600, 300, 80, 10, CONFIRM_COLOR, "START", &FreeSansBold18pt7b, BUTTON_TEXT_COLOR);
 
   drawActionButton(140, 700, 200, 60, 10, CANCEL_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
+  drawHeatIndicator();
   display.endBuffering();
 }
 
@@ -1089,18 +1148,12 @@ void drawReadyToPrintPage() {
   display.endBuffering();
 }
 
-void drawPrintingPage() {
-  display.startBuffering();
-  display.fillScreen(BG_COLOR);
-  display.setFont(&FreeSansBold18pt7b);
+// Redraws only the live value on the Printing page: the current temperature.
+void updatePrintingValues() {
   display.setTextColor(TEXT_COLOR);
-  display.setCursor(80, 100);
-  display.print("PRINTING");
-  
-  display.setFont(&FreeSans9pt7b);
-  
-  display.setCursor(50, 160);
-  display.print("Current Temperature:");
+
+  // Current temperature (12pt bold, baseline 195)
+  clearValueRow(173, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 195);
   if (currentDisplayTemp > -999.0) {
@@ -1111,8 +1164,26 @@ void drawPrintingPage() {
     display.print("--- ");
     printDegreesC(TEXT_COLOR);
   }
-  
+}
+
+// Full Printing page: static labels, volumes and buttons, then the live value.
+void drawPrintingPage() {
+  display.startBuffering();
+  display.fillScreen(BG_COLOR);
+  display.setFont(&FreeSansBold18pt7b);
+  display.setTextColor(TEXT_COLOR);
+  display.setCursor(80, 100);
+  display.print("PRINTING");
+
   display.setFont(&FreeSans9pt7b);
+
+  display.setCursor(50, 160);
+  display.print("Current Temperature:");
+
+  updatePrintingValues();
+
+  display.setFont(&FreeSans9pt7b);
+  display.setTextColor(TEXT_COLOR);
   display.setCursor(50, 235);
   display.print("Selected Temperature:");
   display.setFont(&FreeSansBold12pt7b);
@@ -1165,7 +1236,31 @@ void drawPrintingPage() {
   display.print(" %");
   
   drawActionButton(140, 600, 200, 80, 10, CANCEL_COLOR, "STOP", &FreeSansBold12pt7b, BUTTON_TEXT_COLOR);
+  drawHeatIndicator();
   display.endBuffering();
+}
+
+// Patches the live values of the current page, if it has any, in a single buffered refresh
+void updateCurrentPageValues() {
+  switch (currentPage) {
+    case LOADING_PAGE:
+      display.startBuffering();
+      updateLoadingValues();
+      display.endBuffering();
+      break;
+    case TEMP_READY:
+      display.startBuffering();
+      updateTempReadyValues();
+      display.endBuffering();
+      break;
+    case PRINTING_PAGE:
+      display.startBuffering();
+      updatePrintingValues();
+      display.endBuffering();
+      break;
+    default:
+      break;
+  }
 }
 
 void drawPrintDonePage() {
@@ -1592,6 +1687,7 @@ void handlePrintConfirmTouch(int x, int y) {
     
     if (!executeSetup(config, selectedVol1, selectedVol2, selectedConc)) {
       drawErrorPage("Setup failed");
+      drawHeatIndicator();
       currentPage = ERROR_PAGE;
       return;
     }
@@ -1886,19 +1982,4 @@ void handleWaitingForSyringesTouch(int x, int y) {
     drawHomePage();
   }
 }
-
-void drawHeatIndicator(){
-  static bool wasHeatOn = false;
-  if (heatControlEnabled) {
-    drawActionButton(EMERGENCY_BTN_X, EMERGENCY_BTN_Y, EMERGENCY_BTN_W, EMERGENCY_BTN_H, 10,
-                     HEAT_ACTIVE_COLOR, "EMERGENCY", &FreeSans9pt7b, BUTTON_TEXT_COLOR, "OFF");
-    wasHeatOn = true;
-    return;
-  } else if (wasHeatOn){
-    display.fillRoundRect(EMERGENCY_BTN_X, EMERGENCY_BTN_Y, EMERGENCY_BTN_W, EMERGENCY_BTN_H, 10, BG_COLOR);
-    wasHeatOn = false;
-    return;
-  } 
-}
-
 #endif // UI_SYSTEM_H
