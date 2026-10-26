@@ -480,8 +480,7 @@ void loop() {
       redrawTempReadyStatus();
     }
 #else
-    bool tempOk = (Input_Syringe > -999.0f) &&
-                  (abs(Input_Syringe - Setpoint_Syringe) <= TEMP_TOLERANCE);
+    bool tempOk = syringesTempReached;   // same formula updateTemperatures() already computed this tick
     bool stateOk = (current_state == PRIMED);
 
     if (tempOk && stateOk) {
