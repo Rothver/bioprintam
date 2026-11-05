@@ -23,7 +23,6 @@ extern unsigned long tempStableTime;
 extern SystemConfig config;
 extern float extrusionVolume;
 extern float printTime;
-extern float currentDisplayTemp;
 extern float Input_Syringe;
 extern float Input_HeatMat;
 extern float Output_HeatMat;
@@ -762,8 +761,8 @@ void updateLoadingValues() {
   clearValueRow(213, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 235);
-  if (currentDisplayTemp > -999.0) {
-    display.print(currentDisplayTemp, 1);
+  if (isTempValid(Input_Syringe)) {
+    display.print(Input_Syringe, 1);
     display.print(" ");
     printDegreesC(TEXT_COLOR);
     display.print(" / ");
@@ -779,7 +778,7 @@ void updateLoadingValues() {
   clearValueRow(293, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 315);
-  if (Input_HeatMat > -999.0) {
+  if (isTempValid(Input_HeatMat)) {
     display.print(Input_HeatMat, 1);
     display.print(" ");
     printDegreesC(TEXT_COLOR);
@@ -861,8 +860,8 @@ void updateTempReadyValues() {
   clearValueRow(218, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 240);
-  if (currentDisplayTemp > -999.0) {
-    display.print(currentDisplayTemp, 1);
+  if (isTempValid(Input_Syringe)) {
+    display.print(Input_Syringe, 1);
     display.print(" ");
     printDegreesC(TEXT_COLOR);
     display.print(" / ");
@@ -879,7 +878,7 @@ void updateTempReadyValues() {
   display.setFont(&FreeSans9pt7b);
   display.setCursor(50, 290);
   display.print("Heat Mat: ");
-  if (Input_HeatMat > -999.0) {
+  if (isTempValid(Input_HeatMat)) {
     display.print(Input_HeatMat, 1);
     display.print(" ");
     printDegreesC(TEXT_COLOR);
@@ -902,7 +901,7 @@ void updateTempReadyValues() {
   } else {
     display.print("Waiting for:");
     int yPos = 380;
-    if (abs(currentDisplayTemp - Setpoint_Syringe) > TEMP_TOLERANCE) {
+    if (!syringesTempReached) {   // same source the control loop and READY transition use
       display.setCursor(50, yPos);
       display.print("- Syringe temperature");
       yPos += 30;
@@ -1112,13 +1111,18 @@ void drawReadyToPrintPage() {
   
   display.setCursor(50, 180);
   display.print("Temperature: ");
-  display.print(Input_Syringe, 1);
-  display.print(" ");
-  printDegreesC(TEXT_COLOR);
-  display.print(" / ");
-  display.print(Setpoint_Syringe, 0);
-  display.print(" ");
-  printDegreesC(TEXT_COLOR);
+  if (isTempValid(Input_Syringe)) {
+    display.print(Input_Syringe, 1);
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
+    display.print(" / ");
+    display.print(Setpoint_Syringe, 0);
+    display.print(" ");
+    printDegreesC(TEXT_COLOR);
+  } else {
+    display.print("--- ");
+    printDegreesC(TEXT_COLOR);
+  }
   
   display.setCursor(50, 230);
   display.print("Remaining:");
@@ -1156,8 +1160,8 @@ void updatePrintingValues() {
   clearValueRow(173, 28);
   display.setFont(&FreeSansBold12pt7b);
   display.setCursor(50, 195);
-  if (currentDisplayTemp > -999.0) {
-    display.print(currentDisplayTemp, 1);
+  if (isTempValid(Input_Syringe)) {
+    display.print(Input_Syringe, 1);
     display.print(" ");
     printDegreesC(TEXT_COLOR);
   } else {
@@ -1288,8 +1292,12 @@ void drawPrintDonePage() {
   display.setCursor(80, 430);
   display.print("Final Temperature:");
   display.setCursor(80, 460);
-  display.print(currentDisplayTemp, 1);
-  display.print(" ");
+  if (isTempValid(Input_Syringe)) {
+    display.print(Input_Syringe, 1);
+    display.print(" ");
+  } else {
+    display.print("--- ");
+  }
   printDegreesC(TEXT_COLOR);
   
   // FINISH button (return to start)

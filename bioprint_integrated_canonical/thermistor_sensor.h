@@ -131,6 +131,14 @@ inline void readAllThermistors(float thermistorArray[4]) {
   thermistorArray[3] = readThermistor(THERMISTOR_PIN_A3, SYSTEM_SENSOR);
 }
 
+// ==================== HELPER: VALID-READING TEST ====================
+/*
+ * Every reading is either a real Celsius value or the exact -999.0 sentinel readThermistor() returns for a disconnected/shorted sensor 
+ */
+inline bool isTempValid(float tempC) {
+  return tempC > -999.0f;
+}
+
 // ==================== HELPER: AVERAGE VALID READINGS ====================
 /*
  * Average two thermistor readings, skipping invalid (-999.0) values.
@@ -140,11 +148,11 @@ inline void readAllThermistors(float thermistorArray[4]) {
  *   Average of valid readings, or -999.0 if no valid readings
  */
 inline float averageReadings(float reading1, float reading2) {
-  if (reading1 > -999.0f && reading2 > -999.0f) {
+  if (isTempValid(reading1) && isTempValid(reading2)) {
     return (reading1 + reading2) / 2.0f;
-  } else if (reading1 > -999.0f) {
+  } else if (isTempValid(reading1)) {
     return reading1;
-  } else if (reading2 > -999.0f) {
+  } else if (isTempValid(reading2)) {
     return reading2;
   } else {
     return -999.0f;

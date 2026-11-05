@@ -55,7 +55,6 @@ float currentTemperatures[NUM_THERMISTORS] = {-999, -999, -999, -999};
 // Averaged temperatures for control zones
 float Input_HeatMat = 25.0f;      // Average of heat mat sensors (A0, A1)
 float Input_Syringe = 25.0f;      // Average of system sensors (A2, A3)
-float currentDisplayTemp = 25.0f; // Display temperature (usually A2)
 
 // PID control outputs (0-255 PWM range)
 float Output_HeatMat = 0.0f;
@@ -74,7 +73,6 @@ bool syringesTempReached = false;  // Whether syringe system at target temperatu
  * - Updates currentTemperatures[] array
  * - Updates Input_HeatMat (average of A0, A1)
  * - Updates Input_Syringe (average of A2, A3)
- * - Updates currentDisplayTemp (usually from A2)
  * - Updates syringesTempReached flag
  * - Should be called every TEMP_UPDATE_INTERVAL (default 1000ms)
  */
@@ -85,19 +83,12 @@ inline void updateTemperatures() {
   // Average heat mat sensors (A0, A1)
   Input_HeatMat = averageReadings(currentTemperatures[0], currentTemperatures[1]);
   
-  // Average system sensors (A2, A3) and update display temp
+  // Average system sensors (A2, A3)
   Input_Syringe = averageReadings(currentTemperatures[2], currentTemperatures[3]);
-  if (currentTemperatures[2] > -999.0f) {
-    currentDisplayTemp = currentTemperatures[2];
-  } else if (currentTemperatures[3] > -999.0f) {
-    currentDisplayTemp = currentTemperatures[3];
-  } else {
-    currentDisplayTemp = -999.0f;
-  }
   
   // Check if syringes have reached target temperature
   // Temperature is stable when within TEMP_TOLERANCE of setpoint
-  if (Input_Syringe > -999.0f && abs(Input_Syringe - Setpoint_Syringe) <= TEMP_TOLERANCE) {
+  if (isTempValid(Input_Syringe) && abs(Input_Syringe - Setpoint_Syringe) <= TEMP_TOLERANCE) {
     syringesTempReached = true;
   } else {
     syringesTempReached = false;
@@ -125,7 +116,7 @@ inline void updateTemperatures() {
  */
 inline void computeDualPID() {
   static bool tempFaultLogged = false;
-  bool tempsInvalid = (Input_HeatMat < 0 || Input_Syringe < 0);
+  bool tempsInvalid = (!isTempValid(Input_HeatMat) || !isTempValid(Input_Syringe));
 
   // Log once per fault episode, not once per loop() pass, since a
   // disconnected thermistor can hold this condition for a long time.
