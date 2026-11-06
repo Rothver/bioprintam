@@ -50,23 +50,86 @@ void drawParameterSummary(int x, int y, const char* label, float value, const ch
 void getCurrentPageInfo(const char** title, const char** unit);
 
 
+// ==================== TEXT HELPERS ====================
+#define CENTERED_TEXT_MAX_CHARS 192
+
+// Draws text centered in [areaX, areaX + areaW) (areaW < 0 = to the screen's right
+// edge), first baseline at y. wrap = true breaks on spaces / '\n' so each line fits;
+// wrap = false draws one line. GFX's own mid-word edge-wrap is always disabled.
+// Returns the baseline y of the last line drawn.
+int drawCenteredText(const char* text, int y, const GFXfont* font, uint16_t color,
+                     int areaX = 0, int areaW = -1, bool wrap = true) {
+  if (areaW < 0) {
+    areaW = display.width() - areaX;
+  }
+  display.setFont(font);
+  display.setTextColor(color);
+  display.setTextWrap(false);
+
+  int16_t offsetX, offsetY;
+  uint16_t w, height;
+  char buffer[CENTERED_TEXT_MAX_CHARS];
+  strncpy(buffer, text, sizeof(buffer) - 1);
+  buffer[sizeof(buffer) - 1] = '\0';
+
+  char* line = buffer;
+  while (true) {
+    char* end = line + strlen(line);         // no wrap: the whole rest is one line
+    if (wrap) {
+      // Walk word by word; end = last break point where the line still fits
+      for (char* scan = line, *lastFit = nullptr; ; scan++) {
+        if (*scan != ' ' && *scan != '\n' && *scan != '\0') {
+          continue;
+        }
+        char c = *scan;
+        *scan = '\0';
+        display.getTextBounds(line, 0, 0, &offsetX, &offsetY, &w, &height);
+        *scan = c;
+        if ((int)w > areaW && lastFit != nullptr) {
+          end = lastFit;
+          break;
+        }
+        lastFit = end = scan;
+        if (c != ' ') {                      // '\n' or end of text
+          break;
+        }
+      }
+    }
+    bool last = (*end == '\0');
+    *end = '\0';
+    display.getTextBounds(line, 0, 0, &offsetX, &offsetY, &w, &height);
+    int lineX = areaX + (areaW - (int)w) / 2 - offsetX;
+    if (lineX < areaX) {
+      lineX = areaX;
+    }
+    display.setCursor(lineX, y);
+    display.print(line);
+    if (last) {
+      break;
+    }
+    line = end + 1;
+    y += font->yAdvance;
+  }
+  display.setTextWrap(true);
+  return y;
+}
+
+
 // label2 is optional — omit it (or pass nullptr) for a single centered line,
 // or pass it to stack label/label2 as a two-line centered block.
 void drawActionButton(int x, int y, int width, int height, int radius, uint16_t buttonColor, const char* label, const GFXfont* font, uint16_t textColor = BUTTON_TEXT_COLOR, const char* label2 = nullptr){
   display.fillRoundRect(x, y, width, height, radius, buttonColor);
-  display.setFont(font);
-  display.setTextColor(textColor);
+  display.setFont(font);   // getTextBounds below measures in this font
 
-  //Gets the text offset to allow for centering of text in button
+  // Vertical centering needs the text height; horizontal centering is done by
+  // drawCenteredText. Labels never wrap — the button layout is fixed.
   int16_t x1, y1;
   uint16_t w, h;
   display.getTextBounds(label, 0, 0, &x1, &y1, &w, &h);
 
   if (label2 == nullptr) {
-    int textX = x + (width - w) / 2 - x1;
     int textY = y + (height - h) / 2 - y1;
-    display.setCursor(textX, textY);
-    display.print(label);
+    drawCenteredText(label, textY, font, textColor, x, width, false);
     return;
   }
 
@@ -78,15 +141,8 @@ void drawActionButton(int x, int y, int width, int height, int radius, uint16_t 
   int blockHeight = h + lineSpacing + h2;
   int blockTopY = y + (height - blockHeight) / 2;
 
-  int text1X = x + (width - w) / 2 - x1;
-  int text1Y = blockTopY - y1;
-  display.setCursor(text1X, text1Y);
-  display.print(label);
-
-  int text2X = x + (width - w2) / 2 - x1b;
-  int text2Y = blockTopY + h + lineSpacing - y1b;
-  display.setCursor(text2X, text2Y);
-  display.print(label2);
+  drawCenteredText(label,  blockTopY - y1,                    font, textColor, x, width, false);
+  drawCenteredText(label2, blockTopY + h + lineSpacing - y1b, font, textColor, x, width, false);
 }
 
 // Determines radius of degree measurement ring for temperature display
@@ -1316,11 +1372,9 @@ void drawErrorPage(const char* message) {
   display.setCursor(100, 200);
   display.print("ERROR");
   
-  display.setFont(&FreeSans9pt7b);
-  display.setTextColor(TEXT_COLOR);
-  display.setCursor(80, 300);
-  display.print(message);
-  
+  // Centered with a 10px margin each side; wraps on spaces if the message is too wide
+  drawCenteredText(message, 300, &FreeSans9pt7b, TEXT_COLOR, 10, display.width() - 20);
+
   drawActionButton(165, 450, 150, 70, 10, BUTTON_COLOR, "HOME", &FreeSans9pt7b, BUTTON_TEXT_COLOR);
   display.endBuffering();
 }
