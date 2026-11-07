@@ -100,6 +100,7 @@ enum MotorMoveStatus { MOVING, ARRIVED, FAILED};
 struct MotorMoveState {
   long target1, target2;
   unsigned long start_time;
+  unsigned long timeout_ms;
   long last_pos1, last_pos2;
   int stationary_count;
   int consecutive_arrivals;
@@ -234,13 +235,20 @@ inline void startMotorMove(MotorMoveState &state, long target1, long target2, fl
   tic1.exitSafeStart();
   tic2.exitSafeStart();
 
-  tic1.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms1)));
-  tic2.setMaxSpeed(stepsPerSecToTicUnits(mmsToStepsPerSec(speed_mms2)));
+  long steps_per_sec1 = mmsToStepsPerSec(speed_mms1);
+  long steps_per_sec2 = mmsToStepsPerSec(speed_mms2);
+  tic1.setMaxSpeed(stepsPerSecToTicUnits(steps_per_sec1));
+  tic2.setMaxSpeed(stepsPerSecToTicUnits(steps_per_sec2));
   tic1.setTargetPosition(target1);
   tic2.setTargetPosition(target2);
 
+  float travel_seconds1 = (float)abs(target1 - arduino_pos1) / steps_per_sec1;
+  float travel_seconds2 = (float)abs(target2 - arduino_pos2) / steps_per_sec2;
+  float travel_seconds = max(travel_seconds1, travel_seconds2);
+
   state.target1 = target1;
   state.target2 = target2;
+  state.timeout_ms = (unsigned long)(travel_seconds * MOVE_TIMEOUT_FACTOR * 1000.0f) + MOVE_TIMEOUT_MARGIN_MS;
   state.start_time = millis();
   state.last_pos1 = arduino_pos1;
   state.last_pos2 = arduino_pos2;
@@ -298,7 +306,7 @@ inline MotorMoveStatus pollMotorMove(MotorMoveState &state){
     state.consecutive_arrivals = 0;
   }
 
-  if (millis() - state.start_time > 60000) {
+  if (millis() - state.start_time > state.timeout_ms) {
     arduino_pos1 = pos1;
     arduino_pos2 = pos2;
     return FAILED;
