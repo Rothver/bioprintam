@@ -1553,7 +1553,7 @@ void handleShutdownConfirmTouch(int x, int y) {
     // Go to shutting down page
     currentPage = SHUTTING_DOWN;
 
-    pendingMove.arm(0, 0, 0.5,
+    pendingMove.arm(0, 0, SHUTDOWN_SPEED_MMS,
                     drawShuttingDownPage, onShutdown,
                     "Shutdown failed: motors could not confirm position");
     return;

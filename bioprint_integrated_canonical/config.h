@@ -122,4 +122,12 @@
 // Motor zero retraction
 #define RETRACTION_DURATION 15000  // milliseconds - time for full retraction to zero
 
+// Move timeout = expected travel time * factor + margin (covers accel/decel ramps)
+#define MOVE_TIMEOUT_FACTOR 1.5f
+#define MOVE_TIMEOUT_MARGIN_MS 5000UL
+
+// Shutdown speed derived so a full 0 <-> LOAD_POSITION travel takes FULL_TRAVEL_SECONDS
+#define FULL_TRAVEL_SECONDS 90.0f
+#define SHUTDOWN_SPEED_MMS (LOAD_POSITION * MM_PER_STEP / FULL_TRAVEL_SECONDS)
+
 #endif  // CONFIG_H
