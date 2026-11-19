@@ -120,13 +120,15 @@ struct PendingMove {
   float speed1_phase1, speed2_phase1;
   float speed1_phase2, speed2_phase2;
   void (*onArrived)();
+  void (*onCancelled)();
   String failureMessage;
   void (*onProgress)();
 
   // Arm a single-phase move to (t1, t2) at `speed` mm/s for both motors.
-  // onProgress is called every pass while moving, onArrived once at the end.
+  // onProgress is called every pass while moving, onArrived once at the end,
+  // onCancelled if the user presses CANCEL mid-move.
   void arm(long t1, long t2, float speed,
-           void (*progress)(), void (*arrived)(), const char* failMsg) {
+           void (*progress)(), void (*arrived)(), void (*cancelled)(), const char* failMsg) {
     target1_phase1 = t1;
     target2_phase1 = t2;
     speed1_phase1 = speed;
@@ -136,6 +138,7 @@ struct PendingMove {
     phaseStarted = false;
     onProgress = progress;
     onArrived = arrived;
+    onCancelled = cancelled;
     failureMessage = failMsg;
     active = true;   // last: loop() services the move as soon as this is set
   }
@@ -227,6 +230,21 @@ inline bool syncPositionToTIC() {
 
 // ==================== BASIC MOVEMENT FUNCTIONS ====================
 
+inline unsigned long moveTimeoutMs(float travel_seconds) {
+  return (unsigned long)(travel_seconds * MOVE_TIMEOUT_FACTOR * 1000.0f) + MOVE_TIMEOUT_MARGIN_MS;
+}
+
+// Stop both motors and redefine where they are now as position 0, on the TIC's
+// own step counter as well as arduino_pos1/2 - otherwise the next
+// syncPositionToTIC() would push the old count back into the TIC.
+inline void haltAndZeroPosition() {
+  tic1.haltAndHold();
+  tic2.haltAndHold();
+  tic1.haltAndSetPosition(0);
+  tic2.haltAndSetPosition(0);
+  arduino_pos1 = 0;
+  arduino_pos2 = 0;
+}
 
 inline void startMotorMove(MotorMoveState &state, long target1, long target2, float speed_mms1, float speed_mms2) {
   syncPositionToTIC();
@@ -248,7 +266,7 @@ inline void startMotorMove(MotorMoveState &state, long target1, long target2, fl
 
   state.target1 = target1;
   state.target2 = target2;
-  state.timeout_ms = (unsigned long)(travel_seconds * MOVE_TIMEOUT_FACTOR * 1000.0f) + MOVE_TIMEOUT_MARGIN_MS;
+  state.timeout_ms = moveTimeoutMs(travel_seconds);
   state.start_time = millis();
   state.last_pos1 = arduino_pos1;
   state.last_pos2 = arduino_pos2;

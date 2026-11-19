@@ -145,6 +145,15 @@ void drawActionButton(int x, int y, int width, int height, int radius, uint16_t 
   drawCenteredText(label2, blockTopY + h + lineSpacing - y1b, font, textColor, x, width, false);
 }
 
+void drawCancelButton() {
+  drawActionButton(CANCEL_BTN_X, CANCEL_BTN_Y, CANCEL_BTN_W, CANCEL_BTN_H, 10, CANCEL_COLOR, "CANCEL", &FreeSansBold12pt7b);
+}
+
+bool isCancelButtonTouch(int x, int y) {
+  return x >= CANCEL_BTN_X && x <= CANCEL_BTN_X + CANCEL_BTN_W &&
+         y >= CANCEL_BTN_Y && y <= CANCEL_BTN_Y + CANCEL_BTN_H;
+}
+
 // Determines radius of degree measurement ring for temperature display
 int degreeRingRadius() {
   int16_t x1, y1;
@@ -230,12 +239,16 @@ void drawRetractingToZeroPage() {
   display.print("reach true zero.");
 
   display.setCursor(50, 440);
-  display.print("Slow speed: 0.5 mm/s");
+  display.print("Slow speed: ");
+  display.print(RETRACTION_SPEED_MMS, 1);
+  display.print(" mm/s");
   display.setCursor(50, 470);
-  display.print("No time limit - take as long as needed");
+  display.print("Stops automatically after a full stroke");
 
   // AT ZERO button - halts the motors and confirms this position as zero
   drawActionButton(60, 520, 360, 140, 10, CONFIRM_COLOR, "AT ZERO", &FreeSansBold18pt7b);
+
+  drawCancelButton();
   display.endBuffering();
 }
 
@@ -264,13 +277,15 @@ void drawCalibrationInProgressPage() {
   display.setCursor(100, 560);
   display.print("Please wait...");
   
-  display.setCursor(80, 650);
+  display.setCursor(80, 600);
   display.print("Current positions:");
-  display.setCursor(80, 680);
+  display.setCursor(80, 630);
   display.print("M1: ");
   display.print(arduino_pos1);
   display.print("  M2: ");
   display.print(arduino_pos2);
+
+  drawCancelButton();
   display.endBuffering();
 }
 
@@ -340,6 +355,8 @@ void drawShuttingDownPage() {
   
   display.setCursor(60, 650);
   display.print("Please wait - do not power off");
+
+  drawCancelButton();
   display.endBuffering();
 }
 
@@ -466,6 +483,8 @@ void drawHomingPage() {
   display.print("M2: ");
   display.print(arduino_pos2);
   display.print(" steps");
+
+  drawCancelButton();
   display.endBuffering();
 }
 
@@ -1155,6 +1174,35 @@ void drawPostExtrusionOptionsPage() {
   display.endBuffering();
 }
 
+void drawRemoveSyringesPage() {
+  display.startBuffering();
+  display.fillScreen(BG_COLOR);
+  drawCenteredText("REMOVE", 130, &FreeSansBold18pt7b, TEXT_COLOR);
+  drawCenteredText("SYRINGES", 175, &FreeSansBold18pt7b, TEXT_COLOR);
+
+  drawCenteredText("Material is still left in the syringes. Remove both syringes "
+                   "before the motors re-zero, or the leftover material will be pushed out.",
+                   250, &FreeSans9pt7b, TEXT_COLOR, 40, 400);
+
+  display.setFont(&FreeSans9pt7b);
+  display.setTextColor(TEXT_COLOR);
+  display.setCursor(50, 380);
+  display.print("Remaining:");
+  display.setCursor(50, 410);
+  display.print("Left (M1): ");
+  display.print(config.remaining1, 2);
+  display.print(" mL");
+  display.setCursor(50, 440);
+  display.print("Right (M2): ");
+  display.print(config.remaining2, 2);
+  display.print(" mL");
+
+  drawCenteredText("Motors are stopped at the loading position.", 500, &FreeSans9pt7b, CONFIRM_COLOR, 40, 400);
+
+  drawActionButton(90, 580, 300, 100, 10, CONFIRM_COLOR, "REMOVED", &FreeSansBold18pt7b);
+  display.endBuffering();
+}
+
 void drawReadyToPrintPage() {
   display.startBuffering();
   display.fillScreen(BG_COLOR);
@@ -1468,6 +1516,11 @@ void onCalibrationArrived() {
 
 void onReturnToLoading(){
   motorsHomed = true;
+  if (config.remaining1 >= MIN_DISPENSE_VOLUME_ML || config.remaining2 >= MIN_DISPENSE_VOLUME_ML) {
+    currentPage = REMOVE_SYRINGES;
+    drawRemoveSyringesPage();
+    return;
+  }
   currentPage = MOTOR_ZERO_CHECK;
   drawMotorZeroCheckPage();
 }
@@ -1483,6 +1536,37 @@ void waitingForSyringes() {
   drawWaitingForSyringesPage();
 }
 
+// ---- CANCEL destinations: each move returns to the page that started it ----
+void goToMotorZeroCheckPage() {
+  currentPage = MOTOR_ZERO_CHECK;
+  drawMotorZeroCheckPage();
+}
+
+void goToHomePage() {
+  currentPage = HOME;
+  drawHomePage();
+}
+
+void goToPostExtrusionOptionsPage() {
+  currentPage = POST_EXTRUSION_OPTIONS;
+  drawPostExtrusionOptionsPage();
+}
+
+void goToPrintDonePage() {
+  currentPage = PRINT_DONE;
+  drawPrintDonePage();
+}
+
+void goToLoadingSyringesPage() {
+  currentPage = LOADING_SYRINGES;
+  drawLoadingSyringesPage();
+}
+
+void goToWaitingForSyringesPage() {
+  currentPage = WAITING_FOR_SYRINGES;
+  drawWaitingForSyringesPage();
+}
+
 // ==================== TOUCH HANDLERS ====================
 
 void handleMotorZeroCheckTouch(int x, int y) {
@@ -1494,7 +1578,7 @@ void handleMotorZeroCheckTouch(int x, int y) {
     delay(500);  // Show calibration page briefly
     
     pendingMove.arm(0, 0, 1.0,
-                    drawCalibrationInProgressPage, onCalibrationArrived,
+                    drawCalibrationInProgressPage, onCalibrationArrived, goToMotorZeroCheckPage,
                     "Calibration failed: motors could not confirm position");
     pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
 
@@ -1518,24 +1602,19 @@ void handleRetractingToZeroTouch(int x, int y) {
   // AT ZERO button - user has visually confirmed the syringes are at physical zero
   if (x >= 60 && x <= 420 && y >= 520 && y <= 660) {
     Serial.println("User confirmed motors physically at zero - halting retraction");
-    tic1.haltAndHold();
-    tic2.haltAndHold();
+    haltAndZeroPosition();
 
-    // Redefine this physical point as position 0 on the TIC's own step counter,
-    // not just the Arduino-side variables below - otherwise the next
-    // syncPositionToTIC() call would push the TIC's old (wrong) count back in.
-    tic1.haltAndSetPosition(0);
-    tic2.haltAndSetPosition(0);
-    arduino_pos1 = 0;
-    arduino_pos2 = 0;
+    currentPage = MOTOR_ZERO_CHECK;
+    drawMotorZeroCheckPage();
+    return;
+  }
 
-    currentPage = CALIBRATION_IN_PROGRESS;
-    drawCalibrationInProgressPage();
-    delay(500);  // Show calibration page briefly
-    pendingMove.arm(0, 0, 1.0,
-                    drawCalibrationInProgressPage, onCalibrationArrived,
-                    "Calibration failed: motors could not confirm position");
-    pendingMove.addPhase(LOAD_POSITION, LOAD_POSITION, 2.0);
+  // CANCEL button - stop the crawl but keep the current step count, since the
+  // plunger hasn't been confirmed at zero
+  if (isCancelButtonTouch(x, y)) {
+    emergencyHalt();
+    logFault("user", "CANCEL pressed during zeroing retraction: motors halted, zero unchanged");
+    goToMotorZeroCheckPage();
     return;
   }
 }
@@ -1554,7 +1633,7 @@ void handleShutdownConfirmTouch(int x, int y) {
     currentPage = SHUTTING_DOWN;
 
     pendingMove.arm(0, 0, SHUTDOWN_SPEED_MMS,
-                    drawShuttingDownPage, onShutdown,
+                    drawShuttingDownPage, onShutdown, goToHomePage,
                     "Shutdown failed: motors could not confirm position");
     return;
   }
@@ -1875,7 +1954,7 @@ void handlePostExtrusionOptionsTouch(int x, int y) {
     Serial.println("FINISH pressed - returning motors to load position");
     // Move motors to 15000 (LOAD_POSITION)
       pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 3.0,
-                      drawCalibrationInProgressPage, onReturnToLoading,
+                      drawCalibrationInProgressPage, onReturnToLoading, goToPostExtrusionOptionsPage,
                       "Failed to return to load position");
       
       // Turn off heat
@@ -1891,6 +1970,15 @@ void handlePostExtrusionOptionsTouch(int x, int y) {
     currentPage = HOME;
     drawHomePage();
     return;
+  }
+}
+
+void handleRemoveSyringesTouch(int x, int y) {
+  // REMOVED button
+  if (x >= 90 && x <= 390 && y >= 580 && y <= 680) {
+    Serial.println("User confirmed syringes removed");
+    currentPage = MOTOR_ZERO_CHECK;
+    drawMotorZeroCheckPage();
   }
 }
 
@@ -1962,7 +2050,7 @@ void handlePrintDoneTouch(int x, int y) {
     Serial.println("FINISH pressed from PRINT_DONE - returning to start");
     // Move motors to LOAD_POSITION
       pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 3.0,
-                      drawCalibrationInProgressPage, onReturnToLoading,
+                      drawCalibrationInProgressPage, onReturnToLoading, goToPrintDonePage,
                       "Failed to return to load position");
       
       // Turn off heat
@@ -2004,7 +2092,7 @@ void handleValidationErrorTouch(int x, int y) {
 void handleLoadingSyringesTouch(int x, int y) {
   if (x >= 90 && x <= 390 && y >= 580 && y <= 660) {    
     pendingMove.arm(LOAD_POSITION, LOAD_POSITION, 2.0,
-                    drawHomingPage, waitingForSyringes,
+                    drawHomingPage, waitingForSyringes, goToLoadingSyringesPage,
                     "Failed to reach loading position");
     
     pendingMove.onProgress();
@@ -2031,7 +2119,7 @@ void handleWaitingForSyringesTouch(int x, int y) {
     long target2 = volumeToPosition(selectedVol2);
     
     pendingMove.arm(target1, target2, 2.0,
-                    drawHomingPage, goToPrintConfirmPage,
+                    drawHomingPage, goToPrintConfirmPage, goToWaitingForSyringesPage,
                     "Failed to reach volume position");
     
     pendingMove.onProgress();

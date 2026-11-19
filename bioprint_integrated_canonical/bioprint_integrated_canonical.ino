@@ -115,6 +115,22 @@ SystemConfig config;
 bool lastTouchState = false;
 bool isPrinting = false;
 
+bool readNewTouch(int &touchX, int &touchY) {
+  GDTpoint_t points[5];
+  uint8_t contacts = touchDetector.getTouchPoints(points);
+  if (contacts == 0) {
+    lastTouchState = false;
+    return false;
+  }
+  if (lastTouchState) {
+    return false;
+  }
+  lastTouchState = true;
+  touchX = points[0].x;
+  touchY = points[0].y;
+  return true;
+}
+
 // ==================== UTILITY FUNCTIONS ====================
 // Motor conversion helpers now delegated to libraries/motor_controller.h
 // See motor_controller.h for: mlToSteps, mmsToStepsPerSec, stepsPerSecToTicUnits
@@ -222,39 +238,49 @@ void loop() {
   // ---- 2. Non-blocking motor retraction to zero ----
   // Entered when user presses NO on the motor-zero-check screen. Motors are
   // commanded once toward a far-off crawl target (RETRACTION_CRAWL_TARGET)
-  // and just keep moving at 0.5 mm/s; resetCommandTimeout() runs every
-  // iteration to keep the TIC alive for as long as the user needs. There is
-  // no time limit - the only way out is the AT ZERO button on this page.
+  // and keep moving at RETRACTION_SPEED_MMS until the user presses AT ZERO.
+  // The crawl target is fake, so the time limit is based on one full stroke
+  // (LOAD_POSITION steps) instead: past that, the plunger is at the hard stop
+  // wherever it started, so the motors are halted, that point is taken as
+  // zero, and the user is asked to confirm it on the zero-check page.
   static bool retractionStarted = false;
+  static unsigned long retractionStartTime = 0;
+  static unsigned long retractionTimeoutMs = 0;
   if (currentPage == RETRACTING_TO_ZERO) {
     if (!retractionStarted) {
       tic1.clearDriverError();
       tic2.clearDriverError();
       tic1.exitSafeStart();
       tic2.exitSafeStart();
-      long slowSpeed = stepsPerSecToTicUnits(mmsToStepsPerSec(0.5f));
-      tic1.setMaxSpeed(slowSpeed);
-      tic2.setMaxSpeed(slowSpeed);
+      long crawlStepsPerSec = mmsToStepsPerSec(RETRACTION_SPEED_MMS);
+      tic1.setMaxSpeed(stepsPerSecToTicUnits(crawlStepsPerSec));
+      tic2.setMaxSpeed(stepsPerSecToTicUnits(crawlStepsPerSec));
       tic1.setTargetPosition(RETRACTION_CRAWL_TARGET);
       tic2.setTargetPosition(RETRACTION_CRAWL_TARGET);
+      retractionStartTime = millis();
+      retractionTimeoutMs = moveTimeoutMs((float)LOAD_POSITION / crawlStepsPerSec);
       retractionStarted = true;
     }
+
+    if (millis() - retractionStartTime > retractionTimeoutMs) {
+      logFault("motor", "Zeroing retraction timed out after a full stroke - motors halted");
+      haltAndZeroPosition();
+      retractionStarted = false;
+      currentPage = MOTOR_ZERO_CHECK;
+      drawMotorZeroCheckPage();
+      delay(50);
+      return;
+    }
+
     tic1.resetCommandTimeout();
     tic2.resetCommandTimeout();
     drawRetractingToZeroPage();
 
     // Poll touch here (rather than falling through to section 4's shared
     // dispatch) since this block always returns before reaching it.
-    uint8_t contacts;
-    GDTpoint_t points[5];
-    contacts = touchDetector.getTouchPoints(points);
-    if (contacts > 0) {
-      if (!lastTouchState) {
-        lastTouchState = true;
-        handleRetractingToZeroTouch(points[0].x, points[0].y);
-      }
-    } else {
-      lastTouchState = false;
+    int touchX, touchY;
+    if (readNewTouch(touchX, touchY)) {
+      handleRetractingToZeroTouch(touchX, touchY);
     }
 
     if (currentPage != RETRACTING_TO_ZERO) {
@@ -278,6 +304,19 @@ void loop() {
     }
 
     pendingMove.onProgress();
+
+    // CANCEL: checked before polling so a move that just arrived can't be
+    // cancelled after its onArrived page has already been shown.
+    int touchX, touchY;
+    if (readNewTouch(touchX, touchY) && isCancelButtonTouch(touchX, touchY)) {
+      pendingMove.active = false;
+      emergencyHalt();
+      logFault("user", "CANCEL pressed: motors halted, move abandoned");
+      pendingMove.onCancelled();
+      delay(50);
+      return;
+    }
+
     MotorMoveStatus status = pollMotorMove(pendingMove.moveState);
 
     if (status == ARRIVED) {
@@ -366,105 +405,96 @@ void loop() {
   }
 
   // ---- 4. Touch input dispatch ----
-  uint8_t contacts;
-  GDTpoint_t points[5];
-  contacts = touchDetector.getTouchPoints(points);
-
-  if (contacts > 0) {
-    int touchX = points[0].x;
-    int touchY = points[0].y;
-
-    if (!lastTouchState) {
-      lastTouchState = true;
-
-      // EMERGENCY OFF: Kills heat, halts both motors, abandons any extrusion in progress.
-      if (heatControlEnabled &&
-          touchX >= EMERGENCY_BTN_X && touchX <= EMERGENCY_BTN_X + EMERGENCY_BTN_W &&
-          touchY >= EMERGENCY_BTN_Y && touchY <= EMERGENCY_BTN_Y + EMERGENCY_BTN_H) {
-        heatControlEnabled = false;
-        analogWrite(MOSFET_PIN, 0);
-        emergencyHalt();
-        isPrinting = false;
-        extrusionPhase = PHASE_NONE;  // otherwise the next print resumes mid-phase
-        logFault("user", "EMERGENCY OFF pressed: heat off, motors halted");
-        drawErrorPage("Emergency off pressed");
-        currentPage = ERROR_PAGE;
-        return;
-      }
-
-      switch (currentPage) {
-        case MOTOR_ZERO_CHECK:
-          handleMotorZeroCheckTouch(touchX, touchY);
-          break;
-        case SHUTDOWN_CONFIRM:
-          handleShutdownConfirmTouch(touchX, touchY);
-          break;
-        case WELCOME:
-          handleWelcomeTouch(touchX, touchY);
-          break;
-        case HOME:
-          handleHomeTouch(touchX, touchY);
-          break;
-        case TEMPERATURE_PAGE:
-          handleParameterTouch(touchX, touchY, (int*)TEMP_OPTIONS, NUM_TEMP_OPTIONS, &selectedTemp);
-          break;
-        case VOLUME1:
-          handleParameterTouch(touchX, touchY, (int*)VOL_OPTIONS, NUM_VOL_OPTIONS, &selectedVol1);
-          break;
-        case VOLUME2:
-          handleParameterTouch(touchX, touchY, (int*)VOL_OPTIONS, NUM_VOL_OPTIONS, &selectedVol2);
-          break;
-        case CONCENTRATION:
-          handleParameterTouch(touchX, touchY, (int*)CONC_OPTIONS, NUM_CONC_OPTIONS, &selectedConc);
-          break;
-        case SPEED:
-          handleParameterTouch(touchX, touchY, (int*)SPEED_OPTIONS, NUM_SPEED_OPTIONS, &selectedSpeed);
-          break;
-        case PRINT_CONFIRM:
-          handlePrintConfirmTouch(touchX, touchY);
-          break;
-        case LOADING_PAGE:
-          handleLoadingTouch(touchX, touchY);
-          break;
-        case LOADING_SYRINGES:
-          handleLoadingSyringesTouch(touchX, touchY);
-          break;
-        case WAITING_FOR_SYRINGES:
-          handleWaitingForSyringesTouch(touchX, touchY);
-          break;
-        case TEMP_READY:
-          handleTempReadyTouch(touchX, touchY);
-          break;
-        case EXTRUSION_SETUP:
-          handleExtrusionSetupTouch(touchX, touchY);
-          break;
-        case READY_TO_PRINT:
-          handleReadyToPrintTouch(touchX, touchY);
-          break;
-        case PRINTING_PAGE:
-          handlePrintingTouch(touchX, touchY);
-          if (!isPrinting) {
-            extrusionPhase = PHASE_NONE;
-          }
-          break;
-        case POST_EXTRUSION_OPTIONS:
-          handlePostExtrusionOptionsTouch(touchX, touchY);
-          break;
-        case PRINT_DONE:
-          handlePrintDoneTouch(touchX, touchY);
-          break;
-        case ERROR_PAGE:
-          handleErrorTouch(touchX, touchY);
-          break;
-        case VALIDATION_ERROR_PAGE:
-          handleValidationErrorTouch(touchX, touchY);
-          break;
-        default:
-          break;
-      }
+  int touchX, touchY;
+  if (readNewTouch(touchX, touchY)) {
+    // EMERGENCY OFF: Kills heat, halts both motors, abandons any extrusion in progress.
+    if (heatControlEnabled &&
+        touchX >= EMERGENCY_BTN_X && touchX <= EMERGENCY_BTN_X + EMERGENCY_BTN_W &&
+        touchY >= EMERGENCY_BTN_Y && touchY <= EMERGENCY_BTN_Y + EMERGENCY_BTN_H) {
+      heatControlEnabled = false;
+      analogWrite(MOSFET_PIN, 0);
+      emergencyHalt();
+      isPrinting = false;
+      extrusionPhase = PHASE_NONE;  // otherwise the next print resumes mid-phase
+      logFault("user", "EMERGENCY OFF pressed: heat off, motors halted");
+      drawErrorPage("Emergency off pressed");
+      currentPage = ERROR_PAGE;
+      return;
     }
-  } else {
-    lastTouchState = false;
+
+    switch (currentPage) {
+      case MOTOR_ZERO_CHECK:
+        handleMotorZeroCheckTouch(touchX, touchY);
+        break;
+      case SHUTDOWN_CONFIRM:
+        handleShutdownConfirmTouch(touchX, touchY);
+        break;
+      case WELCOME:
+        handleWelcomeTouch(touchX, touchY);
+        break;
+      case HOME:
+        handleHomeTouch(touchX, touchY);
+        break;
+      case TEMPERATURE_PAGE:
+        handleParameterTouch(touchX, touchY, (int*)TEMP_OPTIONS, NUM_TEMP_OPTIONS, &selectedTemp);
+        break;
+      case VOLUME1:
+        handleParameterTouch(touchX, touchY, (int*)VOL_OPTIONS, NUM_VOL_OPTIONS, &selectedVol1);
+        break;
+      case VOLUME2:
+        handleParameterTouch(touchX, touchY, (int*)VOL_OPTIONS, NUM_VOL_OPTIONS, &selectedVol2);
+        break;
+      case CONCENTRATION:
+        handleParameterTouch(touchX, touchY, (int*)CONC_OPTIONS, NUM_CONC_OPTIONS, &selectedConc);
+        break;
+      case SPEED:
+        handleParameterTouch(touchX, touchY, (int*)SPEED_OPTIONS, NUM_SPEED_OPTIONS, &selectedSpeed);
+        break;
+      case PRINT_CONFIRM:
+        handlePrintConfirmTouch(touchX, touchY);
+        break;
+      case LOADING_PAGE:
+        handleLoadingTouch(touchX, touchY);
+        break;
+      case LOADING_SYRINGES:
+        handleLoadingSyringesTouch(touchX, touchY);
+        break;
+      case WAITING_FOR_SYRINGES:
+        handleWaitingForSyringesTouch(touchX, touchY);
+        break;
+      case TEMP_READY:
+        handleTempReadyTouch(touchX, touchY);
+        break;
+      case EXTRUSION_SETUP:
+        handleExtrusionSetupTouch(touchX, touchY);
+        break;
+      case READY_TO_PRINT:
+        handleReadyToPrintTouch(touchX, touchY);
+        break;
+      case PRINTING_PAGE:
+        handlePrintingTouch(touchX, touchY);
+        if (!isPrinting) {
+          extrusionPhase = PHASE_NONE;
+        }
+        break;
+      case POST_EXTRUSION_OPTIONS:
+        handlePostExtrusionOptionsTouch(touchX, touchY);
+        break;
+      case REMOVE_SYRINGES:
+        handleRemoveSyringesTouch(touchX, touchY);
+        break;
+      case PRINT_DONE:
+        handlePrintDoneTouch(touchX, touchY);
+        break;
+      case ERROR_PAGE:
+        handleErrorTouch(touchX, touchY);
+        break;
+      case VALIDATION_ERROR_PAGE:
+        handleValidationErrorTouch(touchX, touchY);
+        break;
+      default:
+        break;
+    }
   }
 
   // ---- 5. Live page values: patch only the changing values on a new reading ----
