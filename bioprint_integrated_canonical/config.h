@@ -118,9 +118,15 @@
 #define EMERGENCY_BTN_W 115
 #define EMERGENCY_BTN_H 50
 
+// CANCEL button shown on every screen where the motors are moving
+#define CANCEL_BTN_X 140
+#define CANCEL_BTN_Y 690
+#define CANCEL_BTN_W 200
+#define CANCEL_BTN_H 70
+
 // ==================== TIMING CONSTANTS ====================
 // Motor zero retraction
-#define RETRACTION_DURATION 15000  // milliseconds - time for full retraction to zero
+#define RETRACTION_SPEED_MMS 0.5f  // crawl speed while the user watches for physical zero
 
 // Move timeout = expected travel time * factor + margin (covers accel/decel ramps)
 #define MOVE_TIMEOUT_FACTOR 1.5f
