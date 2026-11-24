@@ -505,15 +505,14 @@ void loop() {
   // ---- 6. TEMP_READY: advance to systemReady after stable duration ----
   if (currentPage == TEMP_READY) {
 #ifdef SKIP_TEMP_VALIDATION
-    if (!systemReady && current_state == PRIMED) {
+    if (!systemReady) {
       systemReady = true;
       redrawTempReadyStatus();
     }
 #else
     bool tempOk = syringesTempReached;   // same formula updateTemperatures() already computed this tick
-    bool stateOk = (current_state == PRIMED);
 
-    if (tempOk && stateOk) {
+    if (tempOk) {
       if (tempStableTime == 0) {
         tempStableTime = millis();
       } else if (!systemReady && (millis() - tempStableTime >= TEMP_STABLE_DURATION)) {
