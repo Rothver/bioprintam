@@ -981,11 +981,6 @@ void updateTempReadyValues() {
       display.print("- Syringe temperature");
       yPos += 30;
     }
-    if (current_state != PRIMED) {
-      display.setCursor(50, yPos);
-      display.print("- Actuator initialization");
-      yPos += 30;
-    }
     if (!motorsHomed) {
       display.setCursor(50, yPos);
       display.setTextColor(CANCEL_COLOR);
@@ -1987,7 +1982,22 @@ void handleReadyToPrintTouch(int x, int y) {
     // Re-validate: syringe contents change after every cycle, and "same
     // extrusion" / cancel paths reach this page without passing setup again
     if (!validateExtrusionOrShowError()) return;
-    
+
+    Setpoint_Syringe = selectedTemp;
+    if (!heatControlEnabled) {
+      logFault("temperature", "PRINT pressed with heat off: heat re-enabled");
+      heatControlEnabled = true;
+    }
+#ifndef SKIP_TEMP_VALIDATION
+    if (!syringesTempReached) {
+      tempStableTime = 0;
+      systemReady = false;
+      currentPage = TEMP_READY;
+      drawTempReadyPage();
+      return;
+    }
+#endif
+
     // Initialize cycle tracking
     cycleStartDispensed1 = config.dispensed1;
     cycleStartDispensed2 = config.dispensed2;
